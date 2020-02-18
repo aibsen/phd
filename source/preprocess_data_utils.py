@@ -110,4 +110,36 @@ def save_vectors(dataset, outputFile):
     hf.create_dataset('Y',data=dataset['Y'])
     hf.close()
 
+def flux_to_abmag(f,zp=30):
+    return 30-2.5*np.log10(f)
 
+def is_flux_to_abmag_working(filename):
+    trial = pd.read_pickle(filename)
+    lcs_100 = trial["lcs"][0:100]
+    stats = trial["stats"]
+    maxmg_100=stats["mag_max"]["ztfg"][0:100]
+    maxmr_100=stats["mag_max"]["ztfr"][0:100]
+    maxfg_100=np.zeros(100)
+    maxfr_100=np.zeros(100)
+    for count in np.arange(100):
+        r=np.array(list(filter(lambda p: p["band"]=='ztfr' , lcs_100[count])))
+        g=np.array(list(filter(lambda p: p["band"]=='ztfg' , lcs_100[count])))
+
+        maxfr_100[count] = np.amax(np.array(list(map(lambda p: p["flux"], r))))
+        maxfg_100[count]= np.amax(np.array(list(map(lambda p: p["flux"], g))))
+    df_trial_100 = pd.DataFrame({"mg":maxmg_100, "mr":maxmr_100, "fg":maxfg_100, "fr":maxfr_100})
+    df_trial_100["fg"]=flux_to_abmag(df_trial_100["fg"].values)
+    df_trial_100["fr"]=flux_to_abmag(df_trial_100["fr"].values)
+    if (df_trial_100["fg"]==df_trial_100["mg"]).all() and (df_trial_100["fr"]==df_trial_100["mr"]).all():
+        print("yes is is")
+    else:
+        print("no it ain't")
+
+def load_real_lcs(sn_filename):
+    sn = pd.read_csv(sn_filename,sep="|").dropna(axis=1)
+    sn.dropna(axis=1)
+    #rename columns
+    sn.columns = ["id","time","flux","flux_err","band"]
+    #make passbands consistent with simulated data (0,1 instad of 1,2)
+    sn.loc[sn["band"]==2,"band"] = 0
+    return sn

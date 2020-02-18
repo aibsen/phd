@@ -21,11 +21,8 @@ class Interpolated_LCs(Dataset):
         try:
             with h5py.File(self.dataset_h5) as f:
                 X = f["X"][:,:,0:self.lc_length]
-                print(X.shape)
                 Y = f["Y"]
-                print(Y.shape)
                 ids = f["ids"]
-                print(ids.shape)
                 self.X = torch.tensor(X, device = self.device, dtype=torch.float)
                 self.ids = torch.tensor(ids, device = self.device, dtype=torch.int)
                 self.Y = torch.tensor(Y, device = self.device, dtype=torch.long)
