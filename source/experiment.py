@@ -59,7 +59,7 @@ class Experiment(nn.Module):
 
         if continue_from_epoch != -1:  # if continue from epoch is not -1 then
             try:
-                self.best_val_model_idx, self.best_val_model_acc = self.load_model(
+                self.best_val_model_idx, self.best_val_model_acc, self.best_val_model_f1 = self.load_model(
                     model_save_dir=self.experiment_saved_models, model_save_name="train_model_"+self.metric,
                     model_idx=continue_from_epoch)  # reload existing model from epoch
                 self.starting_epoch = continue_from_epoch
@@ -107,7 +107,9 @@ class Experiment(nn.Module):
             model_idx))))
 
     def load_model(self, model_save_dir, model_save_name, model_idx):
-        state = torch.load(f=os.path.join(model_save_dir, "{}_{}".format(model_save_name, str(model_idx))))
+        filename = os.path.join(model_save_dir, "{}_{}".format(model_save_name, str(model_idx)))
+        print(filename)
+        state = torch.load(f=filename)
         self.model.load_state_dict(state_dict=state['network'])
         return state['best_val_model_idx'], state['best_val_model_acc'], state['best_val_model_f1']
 
