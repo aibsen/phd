@@ -16,7 +16,7 @@ from utils import save_to_stats_pkl_file, load_from_stats_pkl_file, \
 
 class Experiment(nn.Module):
     def __init__(self, network_model, experiment_name,metric="f1_score", num_epochs=100, learning_rate=1e-03, train_data=None, val_data=None,
-                 test_data=None, weight_decay_coefficient=0, use_gpu=True, continue_from_epoch=-1, num_output_classes=4):
+                 test_data=None, weight_decay_coefficient=0, use_gpu=True, continue_from_epoch=-1, num_output_classes=4, best_idx=0):
 
         super(Experiment, self).__init__()
         if torch.cuda.is_available() and use_gpu: 
@@ -44,7 +44,7 @@ class Experiment(nn.Module):
         self.experiment_saved_models = os.path.abspath(os.path.join(self.experiment_folder, "saved_models"))
 
         # Set best models to be at 0 since we are just starting
-        self.best_val_model_idx = 0
+        self.best_val_model_idx = best_idx
         self.best_val_model_acc = 0
         self.best_val_model_f1 = 0
 
@@ -134,7 +134,7 @@ class Experiment(nn.Module):
                     soft_results = results
                     actual_tags = y
                 else :
-                    soft_results = torch.cat((soft_results, validation_results),0)
+                    soft_results = torch.cat((soft_results, results),0)
                     actual_tags = torch.cat((actual_tags, y),0)
 
                 pbar.update(1) 
