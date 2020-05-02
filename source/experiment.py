@@ -188,12 +188,12 @@ class Experiment(nn.Module):
                     self.best_val_model_idx = epoch_idx
 
             #save model only if it's the current best
-            if self.best_val_model_idx == epoch_idx:
-                self.save_model(model_save_dir=self.experiment_saved_models,
-                    model_save_name="train_model_"+self.metric, model_idx=epoch_idx,
-                    best_validation_model_idx=self.best_val_model_idx,
-                    best_validation_model_acc=self.best_val_model_acc,
-                    best_validation_model_f1=self.best_val_model_f1)
+            #if self.best_val_model_idx == epoch_idx:
+            self.save_model(model_save_dir=self.experiment_saved_models,
+                model_save_name="train_model_"+self.metric, model_idx=epoch_idx,
+                best_validation_model_idx=self.best_val_model_idx,
+                best_validation_model_acc=self.best_val_model_acc,
+                best_validation_model_f1=self.best_val_model_f1)
 
             for key, value in current_epoch_metrics.items():
 
