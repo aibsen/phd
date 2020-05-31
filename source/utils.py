@@ -20,14 +20,16 @@ def load_from_stats_pkl_file(experiment_log_filepath, filename):
 
     return stats
 
-def save_classification_results(experiment_log_dir, filename, results, tags,n_classes):
+def save_classification_results(experiment_log_dir, filename, results,ids,tags,n_classes):
         results_filename = os.path.join(experiment_log_dir, filename)
         classes = np.arange(n_classes)
         results_df = pd.DataFrame(results.cpu().numpy(),columns=classes)
+        results_df['id'] = pd.Series(ids.cpu().numpy())
         results_df['true_tags'] = pd.Series(tags.cpu().numpy())
         p = torch.argmax(results, dim=1)
         results_df['predicted_tags'] = pd.Series(p.cpu().numpy())
         results_df.to_csv(results_filename,sep=",",index=False)
+
 
 
 def save_statistics(experiment_log_dir, filename, stats_dict, current_epoch, save_full_dict=False):

@@ -28,13 +28,16 @@ class SelfAttention1D(nn.Module):
         self.layer_dict['e'] = nn.Linear(self.da, self.r,bias=False)
 
     def forward(self, h):
+        # print(h.shape)
         weighted_h = self.layer_dict["weighted_h"](h)
         e = self.layer_dict["e"](torch.tanh(weighted_h))
         a = F.softmax(e, dim=1)
         a = a.permute(0,2,1)
+        # print(a.shape)
         context = torch.bmm(a,h)
+        # print(context.shape)
         return context
-    
+
     def reset_parameters(self):
         for item in self.layer_dict.children():
             try:
@@ -50,7 +53,7 @@ class GRU1D(nn.Module):
 
         if self.params is not None:
             self.build_module()
-    
+
     def build_module(self):
         print("Building basic block of GRU ensemble using input shape", self.params["input_shape"])
         print(self.params)
@@ -84,7 +87,7 @@ class GRU1D(nn.Module):
             return out.squeeze()
         elif self.params["attention"] == "no_attention":
             out = self.layer_dict["linear"](out)
-            return out[:,-1,:] 
+            return out[:,-1,:]
 
     def reset_parameters(self):
         for item in self.layer_dict.children():
@@ -92,4 +95,3 @@ class GRU1D(nn.Module):
                 item.reset_parameters()
             except:
                 pass
-

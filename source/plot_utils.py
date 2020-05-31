@@ -2,6 +2,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix
 
 def plot_raw_lcs(lcs, rows, cols):
     fig, axs = plt.subplots(rows, cols,figsize=(20,10))
@@ -11,7 +12,7 @@ def plot_raw_lcs(lcs, rows, cols):
         for j in np.arange(cols):
             r=np.array(list(filter(lambda p: p["band"]=='ztfr' , lcs[count])))
             g=np.array(list(filter(lambda p: p["band"]=='ztfg' , lcs[count])))
-    
+
             r_t = np.array(list(map(lambda p: p["time"], r)))
             r_f = np.array(list(map(lambda p: p["flux"], r)))
             r_e = np.array(list(map(lambda p: p["fluxerr"], r)))
@@ -23,7 +24,7 @@ def plot_raw_lcs(lcs, rows, cols):
             axs[i][j].errorbar(r_t, r_f, yerr= r_e,fmt='ro')
             axs[i][j].errorbar(g_t, g_f, yerr= g_e,fmt='go')
             count += 1
-            
+
     for ax in axs.flat:
         ax.set(xlabel='time', ylabel='flux')
 
@@ -48,7 +49,7 @@ def plot_raw_and_interpolated_lcs(raw_lcs, interpolated_lcs):
 
         axs[i][0].errorbar(r_t, r_f, yerr= r_e,fmt='ro')
         axs[i][0].errorbar(g_t, g_f, yerr= g_e,fmt='go')
-        
+
         #plot interpolated lcs
         axs[i][1].plot(interpolated_lcs[i][0].cpu(),'ro')
         axs[i][1].plot(interpolated_lcs[i][1].cpu(),'go')
@@ -80,3 +81,31 @@ def plot_train_val_acc_loss(exp_dir,n_epochs):
     ax[1].plot(epochs,val_loss)
     ax[0].set(xlabel='epochs', ylabel='accuracy')
     ax[1].set(xlabel='epochs', ylabel='loss')
+
+
+def plot_cm(true_targets, predictions, normalized=True):
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    cm=confusion_matrix(true_targets,predictions)
+    if normalized:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+    im = ax.imshow(cm, interpolation= 'nearest', cmap=plt.cm.Greens)
+    namesx = ["snIa","snIb/c","snIIn","snIIP"]
+    namesy = ["snIa"," ","snIb/c"," ","snIIn"," ","snIIP"]
+    fmt ='.2f'
+    thresh = cm.max() / 2.
+    for i in range(cm.shape[0]):
+        for j in range(cm.shape[1]):
+            if normalized:
+                ax.text(j, i, format(cm[i, j], fmt),
+                    ha="center", va="center",
+                    color="white" if cm[i, j] > thresh else "black")
+            else :
+                ax.text(j, i, format(cm[i, j]),
+                    ha="center", va="center",
+                    color="white" if cm[i, j] > thresh else "black")
+    ax.set_xticklabels([''] + namesx)
+    ax.set_yticklabels([''] + namesy)
+    ax.set_xlabel("predicted class")
+    ax.set_ylabel("true class")
+    plt.show()

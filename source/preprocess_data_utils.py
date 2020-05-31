@@ -27,102 +27,97 @@ def pkl_to_df(pkl_filename, first_id = 0):
 #receives dataframe with lightcurves of a type
 #returns a series? with a tag for all of the ids
 def df_tags(df_sn, type):
+    print(len(df_sn))
     sn_ids = df_sn.id.unique()
     df_sn_tags = pd.DataFrame(data=sn_ids, columns = ["id"])
     df_sn_tags.loc[:,"type"] = type
     return df_sn_tags
 
-def create_interpolated_vectors(data, tags, length):
+def create_interpolated_vectors(data, tags, length, dtype='sim', n_channels=2):
     obj_ids = tags.id.unique()
-    #different ids for different passbands
     data_cp = data.copy()
+    # if dtype == 'sim':
     data_cp['ob_p']=data.id*10+data.band
-    #print(data_cp.id.unique().size)
-    #print(data_cp.ob_p.unique().size)
-    #print(data_cp.id.unique().size*2==data_cp.ob_p.unique().size)
-    # rem=set(obj_ids_p).difference(set(data_cp['ob_p'].values))
-    # if len(rem)>0:
-    #     mmjd=data_cp.time.mean()
-    #     data_rem=np.zeros((len(rem),6))
-    #     rml=np.array(list(rem))
-    #     data_rem[:,0] = (rml/10).astype('int')
-    #     data_rem[:,1] = np.ones(len(rem))*mmjd 
-    #     data_rem[:,2]= (rml-data_rem[:,0]*10).astype('int')
-    #     data_rem[:,5]=rml
-    #     df_rem=pd.DataFrame(data=data_rem, columns=['id','time','band','flux','fluxerr','ob_p'])
-    #     data_cp=pd.concat([data_cp,df_rem],ignore_index=True).sort_values(['id','time']).reset_index(drop=True)
-       
+    # elif dtype == 'real':
+    #     data_cp['ob_p']=data.id+data.band.apply(lambda band: str(band))
+
+    #sanity check
+    print("there are",data_cp.id.unique().size, "objects")
+    print("there are",data_cp.ob_p.unique().size, "lightcurves")
+    print("is the n_lcs twice n_objs?",data_cp.id.unique().size*2==data_cp.ob_p.unique().size)
+
     #get dataframe with min and max mjd values per each object id
     group_by_mjd = data_cp.groupby(['id'])['time'].agg(['min', 'max']).rename(columns = lambda x : 'time_' + x).reset_index()
     merged = pd.merge(data_cp, group_by_mjd, how = 'left', on = 'id')
-    #print(merged.id.unique().size == data_cp.id.unique().size)
+
+    #sanity check
+    print("do I still have the same nobjs",merged.id.unique().size == data_cp.id.unique().size)
+
     #scale mjd according to max mjd, min mjd and the desired length of the light curve (128)
     merged['scaled_time'] = (length - 1) * (merged['time'] - merged['time_min'])/(merged['time_max']-merged['time_min'])
     merged['count'] = 1
     merged['cc'] = merged.groupby(['ob_p'])['count'].cumcount()
     merged=merged.sort_values(['id','time'])
-    #print(merged.id.unique().size==data_cp.id.unique().size)
-    #print(data_cp.id.unique().size)
-    
+    #sanity check
+    print("still?",merged.id.unique().size==data_cp.id.unique().size)
+
     #reshape df so that for each row there's one lightcurve (2 rows per obj) and each column is a point of it
     # there is two main columns also, for flux and for mjd
     unstack = merged[['ob_p', 'scaled_time', 'flux', 'cc']].set_index(['ob_p', 'cc']).unstack()
-    #print(unstack.shape)
-    #print(unstack.shape[0]== data_cp.id.unique().size*2)
+    print("still when unstacking?",unstack.shape[0]== data_cp.id.unique().size*2)
     #transform above info into numpy arrays
     time_uns = unstack['scaled_time'].values[..., np.newaxis]
     flux_uns = unstack['flux'].values[..., np.newaxis]
     time_flux = np.concatenate((time_uns, flux_uns), axis =2)
-    #print(flux_uns.shape)
-    #print(time_uns.shape)
-    #print(time_flux.shape)
     #create a mask to get points that are valid (not nan)
+    #do this for time dim only, since fluxes will be nan when times are also
     nan_masks = ~np.isnan(time_flux)[:, :, 0]
     x = np.arange(length)
-    
     n_lcs = time_flux.shape[0]
     #here we'll store interpolated lcs
     X = np.zeros((n_lcs, x.shape[0]))
-    X_void = np.zeros((n_lcs, x.shape[0]))
-    
     t=range(n_lcs)
-    #print(n_lcs)
-    #here we'll store the channels that tells us how far a point is from the nearest real point
-    #interpolation
-    for i in t: 
-        if nan_masks[i].any():
+    for i in t:
+        if nan_masks[i].any(): #if any point is real
             X[i] = np.interp(x, time_flux[i][:, 0][nan_masks[i]], time_flux[i][:, 1][nan_masks[i]])
         else:
             X[i] = np.zeros_like(x)
-    # print(X.shape)
-    #get distance for each point to nearest real point
-    t=range(length)
-    for i in t:
-        X_void[:, i] = np.abs((unstack["scaled_time"] - i)).min(axis = 1).fillna(500)
 
-    #reshape vectors so the ones belonging to the same object are grouped into 2 channels  
-    #print(X)
-    n_objs = int(X.shape[0]/2)
+    n_objs = int(n_lcs/2)
+    #reshape vectors so the ones belonging to the same object are grouped into 2 channels
     X_per_band = X.reshape((n_objs,2,length)).astype(np.float32)
-    # print(X_per_band.shape)
-    X_void_per_band = X_void.reshape((n_objs,2,length)).astype(np.float32)
-    # print(X_void_per_band.shape)
-    vectors = np.concatenate((X_per_band,X_void_per_band),axis=1)
-    # print(vectors.shape)
-    return vectors, obj_ids, tags.type.values
+
+    if n_channels == 4:
+    #get distance for each point to nearest real point
+        X_void = np.zeros((n_lcs, x.shape[0]))
+        t=range(length)
+        for i in t:
+            X_void[:, i] = np.abs((unstack["scaled_time"] - i)).min(axis = 1).fillna(500)
+
+        #reshape vectors so the ones belonging to the same object are grouped into 2 channels
+        X_void_per_band = X_void.reshape((n_objs,2,length)).astype(np.float32)
+        vectors = np.concatenate((X_per_band,X_void_per_band),axis=1)
+        return vectors, obj_ids, tags.type.values
+
+    elif n_channels == 2:
+        return X_per_band, obj_ids, tags.type.values
 
 def save_vectors(dataset, outputFile):
     hf=h5py.File(outputFile,'w')
     print("writing X")
     hf.create_dataset('X',data=dataset['X'])
     print("writing ids")
-    hf.create_dataset('ids',data=dataset['ids'])
+    print(dataset['ids'])
+    hf.create_dataset('ids',data=dataset['ids'],dtype='int64')
     print("writing Y")
     hf.create_dataset('Y',data=dataset['Y'])
     hf.close()
 
 def flux_to_abmag(f,zp=30):
-    return 30-2.5*np.log10(f)
+    return zp-2.5*np.log10(f)
+
+def abmag_to_flux(mag,zp=30):
+    return np.power(10,(zp-mag)/2.5)
 
 def is_flux_to_abmag_working(filename):
     trial = pd.read_pickle(filename)
@@ -154,3 +149,39 @@ def load_real_lcs(sn_filename):
     #make passbands consistent with simulated data (0,1 instad of 1,2)
     sn.loc[sn["band"]==2,"band"] = 0
     return sn
+
+def check_lc_length(data, percentile=None):
+    #td_threshold: time difference threshold in mjd
+
+    #different ids for different passbands
+    data_cp = data.copy()
+    # print(data_cp)
+    # data_cp['id_b']=data.id+data.band.astype('str')
+    data_cp['id_b']=data.id+data.band.apply(lambda band: str(band))
+
+    #get ids of real objects that have at least d days of observations
+    #d is defined as the value which percentile% of the data falls below
+    group_by_id = data_cp.groupby(['id'])['time'].agg(['min', 'max']).rename(columns = lambda x : 'time_' + x).reset_index()
+    group_by_id["time_diff"]=group_by_id.time_max-group_by_id.time_min
+    group_by_id_band = data_cp.groupby(['id','band'])['time'].agg(['count']).rename(columns = lambda x : 'time_' + x).reset_index()
+
+    if percentile :
+        td_stats=group_by_id.describe()
+        #get percentile threshold value. x% of data falls below this value.
+        td_threshold=td_stats.loc[percentile,'time_diff']
+        print("time diff threshold for percentile ",percentile, " is ",td_threshold)
+        ids_enough_obs_days=group_by_id[group_by_id.time_diff>td_threshold].id.values
+        #get ids of real objects that have at least c points per passband
+        #c is defined as the value which percentile% of the data falls below
+        # td_stats=group_by_id_band.describe()
+        # tc_threshold=td_stats.loc[percentile,'time_count']
+        # print("point count threshold for percentile ",percentile, " is ",tc_threshold)
+        # group_by_id_band=group_by_id_band[group_by_id_band.time_count>tc_threshold]
+
+    else :
+        ids_enough_obs_days=group_by_id[group_by_id.time_diff>40].id.values
+        td_threshold=40
+
+    group_by_id_band = group_by_id_band.groupby(['id']).count()
+    ids_enough_point_count = group_by_id_band[group_by_id_band.time_count==2]
+    return td_threshold, list(set(ids_enough_point_count.index.values))
