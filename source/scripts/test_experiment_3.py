@@ -6,14 +6,14 @@ import time
 import h5py
 import os, sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from datasets import Interpolated_LCs, RandomCrop
+from datasets import LCs, RandomCrop, CachedLCs
 from recurrent_models import GRU1D
 from experiment import Experiment
 from plot_utils import *
 
 results_dir = "../../results/"
 exp_name = "unbalanced_dataset_m_realzp_328_110"
-num_epochs = 30
+num_epochs =1
 
 lc_length = 128
 seed = 1772670
@@ -24,8 +24,8 @@ wdc = 1e-03
 
 #load dataset
 interpolated_dataset_filename = "../../data/training/linearly_interpolated/unbalanced_dataset_m_realzp_128.h5"
-random_crop=RandomCrop(54,128)
-interpolated_dataset = Interpolated_LCs(lc_length, interpolated_dataset_filename,transform=random_crop)
+# random_crop=RandomCrop(54,128)
+interpolated_dataset = CachedLCs(lc_length, interpolated_dataset_filename)
 dataset_length = len(interpolated_dataset)
 
 #split into train/validation, validation will be ~ .4
@@ -40,6 +40,8 @@ train_data = torch.utils.data.DataLoader(train_dataset, batch_size=64, shuffle=T
 
 
 for idx, (x, y,ids) in enumerate(train_data):
-    print(x,y,ids)
+    print(idx)
     print(x.shape)
-    break
+    print(y.shape)
+    print(ids.shape)
+    print("\n")

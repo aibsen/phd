@@ -41,9 +41,9 @@ tags = []
 ids = []
 
 
-for type, sn in enumerate(sns_list):
+for t, sn in enumerate(sns_list):
     # print("type ", type)
-    sn_tags = df_tags(sn, type)
+    sn_tags = df_tags(sn, t)
     if len(tags)==0:
          tags=sn_tags
     else:
@@ -86,14 +86,20 @@ def construct_vectors(sns,filename,meta_file=None,percentile=None):
     'Y':Y,
     'ids':obids.astype(int)
     }
-    save_vectors(dataset,filename.format(percentile,scaled_lc_length))
+    # save_vectors(dataset,filename.format(percentile,scaled_lc_length))
+    save_vectors(dataset,filename)
 
 
 
 
-percentiles = ['25%','50%','75%']
-for p in percentiles:
-    metafile="real_data_tags_{}p_{}.csv"
-    filename = "real_data_{}p_{}.h5"
-    construct_vectors(sns,filename,metafile,p)
-    #
+# percentiles = ['25%','50%','75%']
+# for p in percentiles:
+#     metafile="real_data_tags_{}p_{}.csv"
+#     filename = "real_data_{}p_{}.h5"
+#     construct_vectors(sns,filename,metafile,p)
+#     #
+
+
+metafile="real_data_tags_40th_16l.csv"
+filename = "real_data_40th_16l.h5"
+construct_vectors(sns,filename,metafile)

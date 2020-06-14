@@ -26,11 +26,11 @@ def pkl_to_df(pkl_filename, first_id = 0):
 
 #receives dataframe with lightcurves of a type
 #returns a series? with a tag for all of the ids
-def df_tags(df_sn, type):
+def df_tags(df_sn, t):
     print(len(df_sn))
     sn_ids = df_sn.id.unique()
     df_sn_tags = pd.DataFrame(data=sn_ids, columns = ["id"])
-    df_sn_tags.loc[:,"type"] = type
+    df_sn_tags.loc[:,"type"] = t
     return df_sn_tags
 
 def create_interpolated_vectors(data, tags, length, dtype='sim', n_channels=2):

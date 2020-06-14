@@ -83,7 +83,7 @@ def plot_train_val_acc_loss(exp_dir,n_epochs):
     ax[1].set(xlabel='epochs', ylabel='loss')
 
 
-def plot_cm(true_targets, predictions, normalized=True):
+def plot_cm(filename,true_targets, predictions, normalized=True):
     fig = plt.figure()
     ax = fig.add_subplot(111)
     cm=confusion_matrix(true_targets,predictions)
@@ -108,4 +108,4 @@ def plot_cm(true_targets, predictions, normalized=True):
     ax.set_yticklabels([''] + namesy)
     ax.set_xlabel("predicted class")
     ax.set_ylabel("true class")
-    plt.show()
+    plt.savefig(filename)
