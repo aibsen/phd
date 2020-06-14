@@ -1,11 +1,7 @@
 import torch
 import numpy as np
 from torch.utils.data import Dataset
-from torch.utils import data
-import matplotlib.pyplot as plt
-import itertools as it
 import h5py
-import pandas as pd
 import random
 
 class LCs(Dataset):
@@ -46,7 +42,7 @@ class LCs(Dataset):
         else:
             return None
 
-class CachedLCs(data.Dataset):
+class CachedLCs(Dataset):
 
     def __init__(self,lc_length, dataset_file, data_cache_size=100000, transform=None):
 
@@ -105,48 +101,3 @@ class CachedLCs(data.Dataset):
         self.data_cache[str(idx)] = sample
 
 
-class RandomCrop(object):
-  
-    def __init__(self, output_size, lc_length):
-        
-        self.output_size = output_size
-        self.lc_length = lc_length
-
-    def __call__(self, sample):
-        X,Y,obid=sample
-        left = np.random.randint(0, self.lc_length - self.output_size)
-        X=X[:,left:left+self.output_size]
-        return X,Y,obid
-
-
-class ZeroPad(object):
-
-    def __init__(self, output_size, lc_length):    
-        self.output_size = output_size
-        self.lc_length = lc_length
-        zeros = output_size-lc_length
-        self.padding = torch.nn.ConstantPad1d((0,zeros), 0)
-
-    def __call__(self, sample):
-        X,Y,obid=sample
-        if self.output_size > self.lc_length:
-            X=self.padding(X)
-        elif self.output_size<self.lc_length:
-            X=X[:,0:self.output_size] #crop if no pad is needed
-        return X,Y,obid
-
-
-class RightCrop(object):
-  
-    def __init__(self, output_size, lc_length):
-        
-        self.output_size = output_size
-        self.lc_length = lc_length
-
-    def __call__(self, sample):
-        if self.output_size <= self.lc_length:
-            X,Y,obid=sample
-            X=X[:,0:self.output_size]
-            return X,Y,obid 
-        else:
-            print("crop size must be smaller than the length of lc")
