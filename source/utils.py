@@ -31,6 +31,11 @@ def save_classification_results(experiment_log_dir, filename, results,ids,tags,n
         results_df.to_csv(results_filename,sep=",",index=False)
 
 
+# def save_kfold_statistics(experiment_log_dir,filename,dict):
+#     summary_filename = os.path.join(experiment_log_dir, filename)
+#     with open(summary_filename, 'w') as f:
+#         for key in my_dict.keys():
+#             f.write("%s,%s\n"%(key,my_dict[key]))
 
 def save_statistics(experiment_log_dir, filename, stats_dict, current_epoch, save_full_dict=False):
     """
@@ -83,3 +88,10 @@ def load_statistics(experiment_log_dir, filename):
             stats[keys[idx]].append(value)
 
     return stats
+
+
+def find_best_epoch(f):
+    results_summary = pd.read_csv(f)
+    val_f1 = results_summary.val_f1.values
+    best_epoch = val_f1.argmax()
+    return best_epoch

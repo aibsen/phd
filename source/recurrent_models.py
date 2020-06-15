@@ -62,13 +62,13 @@ class GRU1D(nn.Module):
         self.layer_dict['bn_0'] = nn.BatchNorm1d(self.params["hidden_size"])
         self.layer_dict["gru_1"] = nn.GRU(self.params["hidden_size"], self.params["hidden_size"], batch_first=True)
         self.layer_dict['dropout_1'] = torch.nn.Dropout(p=0.2)
-        self.layer_dict['bn_1'] = nn.BatchNorm1d(100)
+        self.layer_dict['bn_1'] = nn.BatchNorm1d(self.params['hidden_size'])
         self.layer_dict['dropout'] = torch.nn.Dropout(p=0.2)
         self.layer_dict["self_attention"] = SelfAttention1D(self.params)
         if self.params["r"] > 1:
-            self.layer_dict['linear'] = nn.Linear(in_features=100*self.params["r"],out_features=self.params['num_output_classes'])
+            self.layer_dict['linear'] = nn.Linear(in_features=self.params['hidden_size']*self.params["r"],out_features=self.params['num_output_classes'])
         else:
-            self.layer_dict['linear'] = nn.Linear(in_features=100,out_features=self.params['num_output_classes'])
+            self.layer_dict['linear'] = nn.Linear(in_features=self.params['hidden_size'],out_features=self.params['num_output_classes'])
 
     def forward(self, x):
         out = x.permute(0,2,1)

@@ -16,7 +16,7 @@ from utils import save_to_stats_pkl_file, load_from_stats_pkl_file, \
 
 class Experiment(nn.Module):
     def __init__(self, network_model, experiment_name,metric="f1_score", num_epochs=100, learning_rate=1e-03, train_data=None, val_data=None,
-                 test_data=None, weight_decay_coefficient=0, use_gpu=True, continue_from_epoch=-1, num_output_classes=4, best_idx=0):
+                 test_data=None, weight_decay_coefficient=0, use_gpu=True, continue_from_epoch=-1, num_output_classes=4, best_idx=0, verbose=True):
 
         super(Experiment, self).__init__()
         if torch.cuda.is_available() and use_gpu:
@@ -28,6 +28,7 @@ class Experiment(nn.Module):
             self.device = torch.device('cpu')
 
         self.metric = metric
+        self.verbose = verbose
         self.experiment_name = experiment_name
         self.model = network_model
         self.model.to(self.device)
@@ -121,28 +122,30 @@ class Experiment(nn.Module):
         actual_tags = None
         id_events = None
 
-        with tqdm.tqdm(total=len(data)) as pbar:
-            for x, y, ids in data:
-                loss, accuracy,f1,p,r,results = self.run_evaluation_iter(x=x,y=y)
-                metrics["loss"].append(loss)
-                metrics["acc"].append(accuracy)
-                metrics["f1"].append(f1)
-                metrics["precision"].append(p)
-                metrics['recall'].append(r)
-                results = F.softmax(results,dim=1)
+        pbar = tqdm.tqdm(total=len(data))
+        for x, y, ids in data:
+            loss, accuracy,f1,p,r,results = self.run_evaluation_iter(x=x,y=y)
+            metrics["loss"].append(loss)
+            metrics["acc"].append(accuracy)
+            metrics["f1"].append(f1)
+            metrics["precision"].append(p)
+            metrics['recall'].append(r)
+            results = F.softmax(results,dim=1)
 
-                if soft_results is None:
-                    soft_results = results
-                    actual_tags = y
-                    id_events =ids
-                else :
-                    soft_results = torch.cat((soft_results, results),0)
-                    actual_tags = torch.cat((actual_tags, y),0)
-                    id_events = torch.cat((id_events,ids),0)
-
+            if soft_results is None:
+                soft_results = results
+                actual_tags = y
+                id_events =ids
+            else :
+                soft_results = torch.cat((soft_results, results),0)
+                actual_tags = torch.cat((actual_tags, y),0)
+                id_events = torch.cat((id_events,ids),0)
+            
+            if self.verbose:
                 pbar.update(1)
         total_metrics = {key: [np.mean(value)] for key, value in metrics.items()}  # save vaidation set metrics
-        [print("    ",key,": ",str(value)) for key, value in total_metrics.items()]
+        if self.verbose:
+            [print("    ",key,": ",str(value)) for key, value in total_metrics.items()]
 
         save_classification_results(experiment_log_dir=self.experiment_logs, filename=results_filename,results=soft_results,
             ids=id_events,tags=actual_tags,n_classes=self.num_output_classes)
@@ -156,27 +159,31 @@ class Experiment(nn.Module):
             current_epoch_metrics = {"train_acc": [], "train_loss": [], "train_f1":[], "train_precision":[],"train_recall":[],
             "val_acc": [], "val_loss": [],"val_f1":[],"val_precision":[],"val_recall":[]}
 
-            with tqdm.tqdm(total=len(self.train_data)) as pbar_train:
-                for idx, (x, y,ids) in enumerate(self.train_data):
-                    loss, accuracy,f1, p, r = self.run_train_iter(x=x, y=y)
-                    current_epoch_metrics["train_loss"].append(loss)
-                    current_epoch_metrics["train_acc"].append(accuracy)
-                    current_epoch_metrics["train_f1"].append(f1)
-                    current_epoch_metrics["train_precision"].append(p)
-                    current_epoch_metrics['train_recall'].append(r)
-                    pbar_train.update(1)
-                    # pbar_train.set_description("loss: {:.4f}, accuracy: {:.4f}, f1_score: {:.4f}".format(loss, accuracy, f1))
+            if self.verbose:
+                pbar_train = tqdm.tqdm(total=len(self.train_data))
+                pbar_val = tqdm.tqdm(total=len(self.val_data))
 
-            with tqdm.tqdm(total=len(self.val_data)) as pbar_val:
-                for x, y,ids in self.val_data:
-                    loss, accuracy,f1,p,r,_ = self.run_evaluation_iter(x=x, y=y)
-                    current_epoch_metrics["val_loss"].append(loss)
-                    current_epoch_metrics["val_acc"].append(accuracy)
-                    current_epoch_metrics["val_f1"].append(f1)
-                    current_epoch_metrics["val_precision"].append(p)
-                    current_epoch_metrics['val_recall'].append(r)
+            for idx, (x, y,ids) in enumerate(self.train_data):
+                loss, accuracy,f1, p, r = self.run_train_iter(x=x, y=y)
+                current_epoch_metrics["train_loss"].append(loss)
+                current_epoch_metrics["train_acc"].append(accuracy)
+                current_epoch_metrics["train_f1"].append(f1)
+                current_epoch_metrics["train_precision"].append(p)
+                current_epoch_metrics['train_recall'].append(r)
+                if self.verbose:
+                    pbar_train.update(1)
+                # pbar_train.set_description("loss: {:.4f}, accuracy: {:.4f}, f1_score: {:.4f}".format(loss, accuracy, f1))
+
+            for x, y,ids in self.val_data:
+                loss, accuracy,f1,p,r,_ = self.run_evaluation_iter(x=x, y=y)
+                current_epoch_metrics["val_loss"].append(loss)
+                current_epoch_metrics["val_acc"].append(accuracy)
+                current_epoch_metrics["val_f1"].append(f1)
+                current_epoch_metrics["val_precision"].append(p)
+                current_epoch_metrics['val_recall'].append(r)
+                if self.verbose:
                     pbar_val.update(1)
-                    # pbar_val.set_description("loss: {:.4f}, accuracy: {:.4f}, f1_score: {:.4f}".format(loss, accuracy,f1))
+                # pbar_val.set_description("loss: {:.4f}, accuracy: {:.4f}, f1_score: {:.4f}".format(loss, accuracy,f1))
 
             if self.metric == "accuracy":
                 val_mean_accuracy = np.mean(current_epoch_metrics['val_acc'])
@@ -202,12 +209,12 @@ class Experiment(nn.Module):
             save_statistics(experiment_log_dir=self.experiment_logs, filename='summary.csv',
                             stats_dict=total_losses, current_epoch=i)  # save statistics
 
+            if self.verbose:
+                out_string = "\n    ".join(["{}_{:.4f}".format(key, np.mean(value)) for key, value in current_epoch_metrics.items()])
 
-            out_string = "\n    ".join(["{}_{:.4f}".format(key, np.mean(value)) for key, value in current_epoch_metrics.items()])
-
-            epoch_elapsed_time = time.time() - epoch_start_time  # calculate time taken for epoch
-            epoch_elapsed_time = "{:.4f}".format(epoch_elapsed_time)
-            print("Epoch {}:\n".format(epoch_idx), out_string, "\n epoch time", epoch_elapsed_time, "seconds")
+                epoch_elapsed_time = time.time() - epoch_start_time  # calculate time taken for epoch
+                epoch_elapsed_time = "{:.4f}".format(epoch_elapsed_time)
+                print("Epoch {}:\n".format(epoch_idx), out_string, "\n epoch time", epoch_elapsed_time, "seconds")
 
     def run_experiment(self,test_results="test_results.csv", test_summary="test_summary.csv"):
         """

@@ -4,8 +4,10 @@ from torch.utils.data import Dataset
 import h5py
 import random
 
+
+
 class LCs(Dataset):
-    def __init__(self, lc_length, dataset_h5,transform=None):
+    def __init__(self, lc_length, dataset_h5,n_channels=4,transform=None):
 
         self.lc_length = lc_length
         self.dataset_h5 = dataset_h5
@@ -14,33 +16,52 @@ class LCs(Dataset):
         self.Y = None
         self.ids = None
         self.transform = transform
+        self.length = None
+        self.n_channels = n_channels
 
         try:
             with h5py.File(self.dataset_h5,'r') as f:
                 X = f["X"][:,:,0:self.lc_length]
                 Y = f["Y"]
                 ids = f["ids"]
-                self.X = torch.tensor(X, device = self.device, dtype=torch.float)
-                self.ids = torch.tensor(ids, device = self.device, dtype=torch.int)
-                self.Y = torch.tensor(Y, device = self.device, dtype=torch.long)
+                print(X[0].shape)
+                print(len(X))
+                self.length = len(X)
+              
         except Exception as e:
             print(e)
 
     def __len__(self):
-        if self.ids is not None:
-            return len(self.ids)
-        else:
-            return 0
+        return self.length
 
     def __getitem__(self, idx):
-        if self.X is not None:
-            sample = self.X[idx],self.Y[idx], self.ids[idx]
-            if self.transform:
-                return self.transform(sample)
-            else:
-                return sample
+
+        if self.X is None:
+            try:
+                with h5py.File(self.dataset_h5,'r') as f:
+                    X = f["X"][:,:,0:self.lc_length]
+                    Y = f["Y"]
+                    ids = f["ids"]
+                    self.X = torch.tensor(X, device = self.device, dtype=torch.float)
+                    self.ids = torch.tensor(ids, device = self.device, dtype=torch.int)
+                    self.Y = torch.tensor(Y, device = self.device, dtype=torch.long)
+            except Exception as e:
+                print(e)
+
+        sample = self.X[idx],self.Y[idx], self.ids[idx]
+        # t=torch.cuda.get_device_properties(0).total_memory
+        # print(t)
+        if self.transform:
+            return self.transform(sample)
         else:
-            return None
+            return sample
+        
+    def get_items(self,idxs):
+        X = self.X[idxs]
+        Y = self.Y[idxs]
+        ids = self.ids[idxs]
+        return X, Y, ids         
+
 
 class CachedLCs(Dataset):
 
