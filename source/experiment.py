@@ -22,9 +22,11 @@ class Experiment(nn.Module):
         if torch.cuda.is_available() and use_gpu:
             self.device = torch.device('cuda')
             os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-            print("using GPU")
+            if verbose:
+                print("using GPU")
         else:
-            print("using CPU")
+            if verbose:
+                print("using CPU")
             self.device = torch.device('cpu')
 
         self.metric = metric
@@ -109,7 +111,8 @@ class Experiment(nn.Module):
 
     def load_model(self, model_save_dir, model_save_name, model_idx):
         filename = os.path.join(model_save_dir, "{}_{}".format(model_save_name, str(model_idx)))
-        print(filename)
+        if self.verbose:
+            print(filename)
         state = torch.load(f=filename)
         self.model.load_state_dict(state_dict=state['network'])
         return state['best_val_model_idx'], state['best_val_model_acc'], state['best_val_model_f1']
@@ -122,7 +125,8 @@ class Experiment(nn.Module):
         actual_tags = None
         id_events = None
 
-        pbar = tqdm.tqdm(total=len(data))
+        if self.verbose:
+            pbar = tqdm.tqdm(total=len(data))
         for x, y, ids in data:
             loss, accuracy,f1,p,r,results = self.run_evaluation_iter(x=x,y=y)
             metrics["loss"].append(loss)
@@ -223,13 +227,16 @@ class Experiment(nn.Module):
         """
         if self.train_data and self.val_data:
             self.run_train_phase()
-            print("Starting training phase")
+            if self.verbose:
+                print("Starting training phase")
         #getting evaluation metrics for best epoch model only
             self.load_model(model_save_dir=self.experiment_saved_models, model_idx=self.best_val_model_idx, model_save_name="train_model_"+self.metric)
-            print("Starting test phase")
-            print("Generating val set evaluation metrics")
+            if self.verbose:
+                print("Starting test phase")
+                print("Generating val set evaluation metrics")
             self.run_test_phase(self.val_data, "validation_results.csv", "validation_summary.csv")
 
         if self.test_data:
-            print("Generating test set evaluation metrics")
+            if self.verbose:
+                print("Generating test set evaluation metrics")
             self.run_test_phase(self.test_data, test_results, test_summary)

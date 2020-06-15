@@ -19,11 +19,11 @@ class CVExperiment(nn.Module):
 
         super(CVExperiment, self).__init__()
         self.experiment_folder = os.path.abspath(exp_name)
-        print(self.experiment_folder)
+        # print(self.experiment_folder)
         self.experiment_logs = os.path.abspath(os.path.join(self.experiment_folder, "result_outputs"))
-        print(self.experiment_logs)
+        # print(self.experiment_logs)
         self.experiment_folds = os.path.abspath(os.path.join(self.experiment_folder, "folds"))
-        print(self.experiment_folds)
+        # print(self.experiment_folds)
 
 
         if not os.path.exists(self.experiment_folder):  # If experiment directory does not exist
@@ -87,9 +87,9 @@ class CVExperiment(nn.Module):
 
             train_dataset = torch.utils.data.Subset(self.train_data, tr)
             val_dataset = torch.utils.data.Subset(self.train_data, val)
-            print(len(train_dataset))
-            print(len(val_dataset))
-            print("")
+            # print(len(train_dataset))
+            # print(len(val_dataset))
+            # print("")
 
             train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=self.exp_params["batch_size"], shuffle=True)
             val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=self.exp_params["batch_size"], shuffle=True)
@@ -109,7 +109,8 @@ class CVExperiment(nn.Module):
 
             start_time = time.time()
             experiment.run_experiment(test_results=test_results,test_summary=test_summary)
-            print("--- %s seconds ---" % (time.time() - start_time))
+            if self.verbose:
+                print("--- %s seconds ---" % (time.time() - start_time))
 
     def run_test_phase(self,test_results="test_results.csv",test_summary="test_summary.csv"):
         for k in np.arange(self.k):
@@ -126,7 +127,8 @@ class CVExperiment(nn.Module):
             )
             start_time = time.time()
             experiment.run_test_phase(self.test_loader,test_results,test_summary)
-            print("--- %s seconds ---" % (time.time() - start_time))
+            if self.verbose:
+                print("--- %s seconds ---" % (time.time() - start_time))
 
 
 
