@@ -13,6 +13,7 @@ from sklearn.model_selection import KFold
 from datasets import LCs
 from experiment import Experiment
 from utils import load_statistics,save_statistics,find_best_epoch
+import pandas as pd
 
 class CVExperiment(nn.Module):
     def __init__(self, exp_name,exp_params,train_data=None,test_data=None,verbose=True,k=5):
@@ -51,25 +52,19 @@ class CVExperiment(nn.Module):
 
     def save_fold_statistics(self,summary_list):
         for summary_file in summary_list:
-            metrics = []
+            metrics = None
             for k in np.arange(self.k):
                 exp_name = self.experiment_folds+"/fold_k"+str(k+1)+"/result_outputs"
-                summary = load_statistics(exp_name,summary_file)
-                metrics.append(summary)
-
-            keys = metrics[0].keys()
-            stats_keys = [[k+"_mean",k+"_std"] for k in keys]
-            stats_keys = [item for sublist in stats_keys for item in sublist]
-            stats = {key: [] for key in stats_keys}
-
-            for k in keys:
-                metric = [m[k] for m in metrics]
-                meank = k+"_mean"
-                stdk = k+"_std"
-                stats[meank] = [np.array(metric).astype('float64').mean()]
-                stats[stdk] = [np.array(metric).astype('float64').std()]
-            save_statistics(experiment_log_dir=self.experiment_logs, filename=summary_file,stats_dict=stats, current_epoch=0)
-
+                summary = pd.read_csv(exp_name+"/"+summary_file)
+                if metrics is None:
+                    metrics = summary
+                else:
+                    metrics=pd.concat([metrics,summary])
+            metrics_group = metrics.groupby(metrics.index)
+            metrics_means = metrics_group.mean().rename(columns = lambda x : 'mean_' + x)
+            metrics_stds = metrics_group.std().rename(columns = lambda x : 'std_' + x)
+            all_metrics = pd.concat([metrics_means,metrics_stds],axis=1)
+            all_metrics.to_csv(self.experiment_logs+"/"+summary_file,index=False)
 
     def run_experiment(self, test_results="test_results.csv", test_summary="test_summary.csv"):
         if self.train_data:

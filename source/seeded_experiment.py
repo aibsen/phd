@@ -36,10 +36,8 @@ class SeededExperiment(nn.Module):
         
         if seeds:
             self.seeds = seeds
-            print(seeds)
         else :
             self.seeds = np.random.randint(low,high,n_seeds)
-            print(self.seeds)
 
         if train_data:
             self.train_length = len(train_data)
@@ -62,7 +60,7 @@ class SeededExperiment(nn.Module):
 
             metrics_group = metrics.groupby(metrics.index)
             metrics_means = metrics_group.mean()
-            metrics_means.to_csv(self.experiment_logs+"/"+summary_file)
+            metrics_means.to_csv(self.experiment_logs+"/"+summary_file,index=False)
 
 
     def run_experiment(self, test_results="test_results.csv", test_summary="test_summary.csv"):
