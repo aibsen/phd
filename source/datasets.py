@@ -7,7 +7,7 @@ import random
 
 
 class LCs(Dataset):
-    def __init__(self, lc_length, dataset_h5,n_channels=4,transform=None):
+    def __init__(self, lc_length, dataset_h5,n_channels=2,transform=None):
 
         self.lc_length = lc_length
         self.dataset_h5 = dataset_h5
@@ -21,7 +21,7 @@ class LCs(Dataset):
 
         try:
             with h5py.File(self.dataset_h5,'r') as f:
-                X = f["X"][:,:,0:self.lc_length]
+                X = f["X"][:,0:self.n_channels,0:self.lc_length]
                 Y = f["Y"]
                 ids = f["ids"]
                 print(X[0].shape)
@@ -39,7 +39,7 @@ class LCs(Dataset):
         if self.X is None:
             try:
                 with h5py.File(self.dataset_h5,'r') as f:
-                    X = f["X"][:,:,0:self.lc_length]
+                    X = f["X"][:,0:self.n_channels,0:self.lc_length]
                     Y = f["Y"]
                     ids = f["ids"]
                     self.X = torch.tensor(X, device = self.device, dtype=torch.float)

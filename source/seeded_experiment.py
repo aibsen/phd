@@ -18,7 +18,7 @@ import pandas as pd
 class SeededExperiment(nn.Module):
     
     def __init__(self, exp_name,exp_params,
-        seeds=None,train_data=None,test_data=None,verbose=True,n_seeds=10,low=0,high=10e+5):
+        seeds=None,train_data=None,test_data=None,verbose=True,n_seeds=10,low=0,high=10e+5,k=5):
 
         super(SeededExperiment, self).__init__()
 
@@ -33,6 +33,8 @@ class SeededExperiment(nn.Module):
         self.exp_name = exp_name
         self.exp_params = exp_params
         self.verbose = verbose
+
+        self.k=k
         
         if seeds:
             self.seeds = seeds
@@ -75,7 +77,8 @@ class SeededExperiment(nn.Module):
                 self.exp_params, 
                 self.train_data,
                 self.test_data,
-                self.verbose)
+                self.verbose,
+                k=self.k)
             experiment.run_experiment(test_results,test_summary)
 
         if self.train_data and self.test_data:

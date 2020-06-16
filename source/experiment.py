@@ -125,28 +125,29 @@ class Experiment(nn.Module):
         actual_tags = None
         id_events = None
 
-        if self.verbose:
-            pbar = tqdm.tqdm(total=len(data))
-        for x, y, ids in data:
-            loss, accuracy,f1,p,r,results = self.run_evaluation_iter(x=x,y=y)
-            metrics["loss"].append(loss)
-            metrics["acc"].append(accuracy)
-            metrics["f1"].append(f1)
-            metrics["precision"].append(p)
-            metrics['recall'].append(r)
-            results = F.softmax(results,dim=1)
+        # if self.verbose:
+        #     pbar = tqdm.tqdm(total=len(data))
+        with tqdm.tqdm(total=len(data)) as pbar:
+            for x, y, ids in data:
+                loss, accuracy,f1,p,r,results = self.run_evaluation_iter(x=x,y=y)
+                metrics["loss"].append(loss)
+                metrics["acc"].append(accuracy)
+                metrics["f1"].append(f1)
+                metrics["precision"].append(p)
+                metrics['recall'].append(r)
+                results = F.softmax(results,dim=1)
 
-            if soft_results is None:
-                soft_results = results
-                actual_tags = y
-                id_events =ids
-            else :
-                soft_results = torch.cat((soft_results, results),0)
-                actual_tags = torch.cat((actual_tags, y),0)
-                id_events = torch.cat((id_events,ids),0)
-            
-            if self.verbose:
+                if soft_results is None:
+                    soft_results = results
+                    actual_tags = y
+                    id_events =ids
+                else :
+                    soft_results = torch.cat((soft_results, results),0)
+                    actual_tags = torch.cat((actual_tags, y),0)
+                    id_events = torch.cat((id_events,ids),0)
+                # if self.verbose:
                 pbar.update(1)
+
         total_metrics = {key: [np.mean(value)] for key, value in metrics.items()}  # save vaidation set metrics
         if self.verbose:
             [print("    ",key,": ",str(value)) for key, value in total_metrics.items()]
@@ -163,29 +164,30 @@ class Experiment(nn.Module):
             current_epoch_metrics = {"train_acc": [], "train_loss": [], "train_f1":[], "train_precision":[],"train_recall":[],
             "val_acc": [], "val_loss": [],"val_f1":[],"val_precision":[],"val_recall":[]}
 
-            if self.verbose:
-                pbar_train = tqdm.tqdm(total=len(self.train_data))
-                pbar_val = tqdm.tqdm(total=len(self.val_data))
-
-            for idx, (x, y,ids) in enumerate(self.train_data):
-                loss, accuracy,f1, p, r = self.run_train_iter(x=x, y=y)
-                current_epoch_metrics["train_loss"].append(loss)
-                current_epoch_metrics["train_acc"].append(accuracy)
-                current_epoch_metrics["train_f1"].append(f1)
-                current_epoch_metrics["train_precision"].append(p)
-                current_epoch_metrics['train_recall'].append(r)
-                if self.verbose:
+            # if self.verbose:
+            #     pbar_train = tqdm.tqdm(total=len(self.train_data))
+            #     pbar_val = tqdm.tqdm(total=len(self.val_data))
+            with tqdm.tqdm(total=len(data)) as pbar_train:
+                for idx, (x, y,ids) in enumerate(self.train_data):
+                    loss, accuracy,f1, p, r = self.run_train_iter(x=x, y=y)
+                    current_epoch_metrics["train_loss"].append(loss)
+                    current_epoch_metrics["train_acc"].append(accuracy)
+                    current_epoch_metrics["train_f1"].append(f1)
+                    current_epoch_metrics["train_precision"].append(p)
+                    current_epoch_metrics['train_recall'].append(r)
+                    # if self.verbose:
                     pbar_train.update(1)
                 # pbar_train.set_description("loss: {:.4f}, accuracy: {:.4f}, f1_score: {:.4f}".format(loss, accuracy, f1))
 
-            for x, y,ids in self.val_data:
-                loss, accuracy,f1,p,r,_ = self.run_evaluation_iter(x=x, y=y)
-                current_epoch_metrics["val_loss"].append(loss)
-                current_epoch_metrics["val_acc"].append(accuracy)
-                current_epoch_metrics["val_f1"].append(f1)
-                current_epoch_metrics["val_precision"].append(p)
-                current_epoch_metrics['val_recall'].append(r)
-                if self.verbose:
+            with tqdm.tqdm(total=len(data)) as pbar_val:
+                for x, y,ids in self.val_data:
+                    loss, accuracy,f1,p,r,_ = self.run_evaluation_iter(x=x, y=y)
+                    current_epoch_metrics["val_loss"].append(loss)
+                    current_epoch_metrics["val_acc"].append(accuracy)
+                    current_epoch_metrics["val_f1"].append(f1)
+                    current_epoch_metrics["val_precision"].append(p)
+                    current_epoch_metrics['val_recall'].append(r)
+                    # if self.verbose:
                     pbar_val.update(1)
                 # pbar_val.set_description("loss: {:.4f}, accuracy: {:.4f}, f1_score: {:.4f}".format(loss, accuracy,f1))
 

@@ -6,128 +6,158 @@ import time
 import h5py
 import os, sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from datasets import LCs, CachedLCs, RandomCrop,ZeroPad,RightCrop
+from datasets import LCs
 from recurrent_models import GRU1D
 from convolutional_models import FCNN1D, ResNet1D
-from experiment import Experiment
+from seeded_experiment import SeededExperiment
 from plot_utils import *
 from torchvision import transforms
-
-#this experiment is for testing real data only. It has several parts:
-#part 1: classifiers were trained with complete simulated light curves for all 4 models. lc_len = 128
-#part 2 : classifiers were trained with half light curves for all 4 models, using the 1st half. lc_len = 64
-#part 3 : classifiers were trained with half light curves for all 4 models, random chunks. lc_len = 64
-#part 4 : classifiers were trained with complete light curves and randomly cropped half light curves (padded). lc_len = 128
-#part 5 : classifiers were trained with 1/4 lcs 1st bit. lc_len = 32
-#part 6 : classifiers were trained with 1/4 lcs random bit. lc_len = 32
-#part 7 : classifiers were trained with complete lcs and 1/4 lcs random bit. lc_len = 128
-#part 8 : classifiers were trained with complete lcs and random 10% bit. lc_len = 128
-#part 9 : classifiers were trained with complete lcs and 1st half. lc_len = 128
-#part 10 : classifiers were trained with complete lcs and 1st 1/4. lc_len = 128
-#part 11 : classifiers were trained with complete lcs and 1st half + 1/4. lc_len = 128
+from transforms import RandomCrop,ZeroPad,RightCrop
 
 results_dir = "../../results/"
 interpolated_dataset_filename = "../../data/training/linearly_interpolated/unbalanced_dataset_m_realzp_128.h5"
+real_dataset_filename = "../../data/testing/real_data_30_careful.h5"
 
 lc_length = 128
-num_epochs = 100
-seed = 1772670
-torch.manual_seed(seed=seed)
+num_epochs = 30
 use_gpu = True
 lr = 1e-03
 wdc = 1e-03
 batch_size = 64
+n_seeds = 5
+
+############ PART 1 ###############
+#training using complete simulated light curves and cropped light curves (1st bits) (50% + 25%+10%) (padded) 
+#testing using padded real light curves chopped. 10% of lcs
+
+#load dataset
+train_dataset = LCs(lc_length, interpolated_dataset_filename)
+train_length = len(train_dataset)
+test_dataset = LCs(lc_length, real_dataset_filename)
+test_length = len(test_dataset)
 
 
-fcn_params = {
-    "num_output_classes" : 4,
-    "regularize" : False,
-    "global_pool" : 'max'
-}
-resnet_params = {
-    "num_output_classes" : 4,
-    "global_pool":'avg',
-    "n_blocks":3
-}
-gru_params = {
-    "num_output_classes" : 4,
-    "hidden_size":100,
-    "batch_size":batch_size,
-    "attention":"no_attention",
-    "da":50,
-    "r":1
+#apply transforms so we'll be training with 100, 50, 25 and 10 percent of light curves
+if train_dataset[0][0].shape == test_dataset[0][0].shape:
+    train_length1 = int(train_length/4)
+    train_length2 = int(train_length/4)
+    train_length3 = int(train_length/4)
+    train_length4 = train_length - train_length1 - train_length2 - train_length3
+    trd1, trd2, trd3, trd4  = torch.utils.data.random_split(train_dataset, [train_length1,train_length2, train_length3, train_length4])
+
+
+    for p,trd in list(zip([0.1,0.25,0.5],[trd1,trd2,trd3])):
+        crop=RandomCrop(int(lc_length*p),lc_length)
+        zeropad = ZeroPad(lc_length,int(lc_length*p))
+        composed = transforms.Compose([crop,zeropad])
+        trd.transform = composed
+
+    train_dataset = torch.utils.data.ConcatDataset([trd1,trd2,trd3,trd4])
+
+    input_shape = train_dataset[0][0].shape
+
+    #define network params
+    fcn_params = {
+        "input_shape": input_shape,
+        "num_output_classes" : 4,
+        "regularize" : False,
+        "global_pool" : 'max'
     }
-grusa_params = {
-    "num_output_classes" : 4,
-    "hidden_size":100,
-    "batch_size":batch_size,
-    "attention":"self_attention",
-    "da":50,
-    "r":1
+    resnet_params = {
+        "input_shape": input_shape,
+        "num_output_classes" : 4,
+        "global_pool":'avg',
+        "n_blocks":3
     }
-params = [fcn_params, resnet_params, gru_params, grusa_params]
+    gru_params = {
+        "input_shape": input_shape,
+        "num_output_classes" : 4,
+        "hidden_size":100,
+        "batch_size":batch_size,
+        "attention":"no_attention",
+        }
+    grusa_params = {
+        "input_shape": input_shape,
+        "num_output_classes" : 4,
+        "hidden_size":100,
+        "batch_size":batch_size,
+        "attention":"self_attention",
+        "da":50,
+        "r":3
+        }
 
-test_dataset_filenames = ["../../data/testing/real_data_25%p_15.h5",
-                        "../../data/testing/real_data_50%p_22.h5",
-                        "../../data/testing/real_data_75%p_44.h5"]
-test_lc_lengths = [15,22,44]
-test_percentiles = [25,50,75]
-lc_lens = [128,64,64,128,32,32,128,128,128,128,128] #length input shape of trained classifiers
-results_dir = "../../results/"
+    exp_params={
+        "num_epochs" : num_epochs,
+        "learning_rate" : lr,
+        "weight_decay_coefficient" : wdc,
+        "use_gpu" : use_gpu,
+        "batch_size" : batch_size
+    }
+    #2.C RNN
+    exp_name = "exp1_p2_gru"
+    gru = GRU1D(gru_params)
+    exp_params["network_model"] = gru
+    experiment = SeededExperiment(
+        results_dir+exp_name,
+        exp_params,
+        train_data=train_dataset,
+        test_data=test_dataset,
+        verbose=True,
+        n_seeds=n_seeds)
 
-def load_dataset(lc_length, test_dataset_filename, transform=None):
-    test_dataset = LCs(lc_length, test_dataset_filename, transform=transform)
-    test_length = len(test_dataset)
-    print("test set length: ",str(test_length))
-    print(test_dataset[0][0].shape)
-    test_loader = torch.utils.data.DataLoader(test_dataset,batch_size=64,shuffle=True)
-    return test_loader, test_dataset[0][0].shape
-
-def find_best_epoch(f):
-    results_summary = pd.read_csv(f)
-    val_f1 = results_summary.val_f1.values
-    best_epoch = val_f1.argmax()
-    return best_epoch
-
-for i in np.arange(7,12): #for each experiment
-
-    exp_names = list(map(lambda x: x.format(i),["exp1_p{}_fcn", "exp1_p{}_resnet", "exp1_p{}_gru", "exp1_p{}_grusa"]))
-    # for l,test_dataset_filename in list(zip(test_lc_lengths,test_dataset_filenames)): #for each test set
-
-
-    for m,param in enumerate(params): #for each model in the experiment 
-        best_epoch = find_best_epoch(results_dir+exp_names[m]+"/result_outputs/summary.csv")
-
-        for j,test_dataset_filename in enumerate(test_dataset_filenames): #classify each test set with each model in each exp
-            zeropad = ZeroPad(lc_lens[i-1],test_lc_lengths[j])
-            test_loader, input_shape = load_dataset(lc_lens[i-1],test_dataset_filename,zeropad)
-            
-            param["input_shape"] = input_shape
-
-            if m == 0: #fcn
-                network = FCNN1D(param)
-            elif m == 1: #resnet
-                network = ResNet1D(param)
-            elif m == 2: #gru
-                network = GRU1D(param)
-            elif m == 3: #grusa
-                network = GRU1D(param)
+    start_time = time.time()
+    experiment.run_experiment()
+    print("--- %s seconds ---" % (time.time() - start_time))
 
 
-            experiment = Experiment(
-                network_model = network,
-                experiment_name = results_dir+exp_names[m],
-                num_epochs = num_epochs,
-                learning_rate = lr,
-                weight_decay_coefficient = wdc,
-                use_gpu = use_gpu,
-                test_data = test_loader,
-                best_idx = best_epoch
-            )
-            start_time = time.time()
-            test_results_filename= "test_results_real_{}.csv".format(test_lc_lengths[j])
-            test_results_summary_filename = "test_results_real_summary_{}.csv".format(test_lc_lengths[j])
-            experiment.run_test_phase(test_loader,test_results_filename,test_results_summary_filename)
-            print("--- %s seconds ---" % (time.time() - start_time))
+    #2.D RNN-attention
+    exp_name = "exp1_p2_grusa"
+    grusa = GRU1D(grusa_params)
+    exp_params["network_model"] = grusa
+    experiment = SeededExperiment(
+        results_dir+exp_name,
+        exp_params,
+        train_data=train_dataset,
+        test_data=test_dataset,
+        verbose=True,
+        n_seeds=n_seeds)
 
-    
+    start_time = time.time()
+    experiment.run_experiment()
+    print("--- %s seconds ---" % (time.time() - start_time))
+
+    #2.A FCN
+    exp_name = "exp2_p1_fcn"
+    fcn = FCNN1D(fcn_params)
+    exp_params["network_model"] = fcn
+    experiment = SeededExperiment(
+        results_dir+exp_name,
+        exp_params,
+        train_data=train_dataset,
+        test_data=test_dataset,
+        verbose=True,
+        n_seeds=n_seeds)
+    start_time = time.time()
+    experiment.run_experiment()
+    print("--- %s seconds ---" % (time.time() - start_time))
+
+    #2.B ResNet
+    exp_name = "exp1_p2_resnet"
+    resnet = ResNet1D(resnet_params)
+    exp_params["network_model"] = resnet
+    experiment = SeededExperiment(
+        results_dir+exp_name,
+        exp_params,
+        train_data=train_dataset,
+        test_data=test_dataset,
+        verbose=True,
+        n_seeds=n_seeds)
+
+    start_time = time.time()
+    experiment.run_experiment()
+    print("--- %s seconds ---" % (time.time() - start_time))
+
+
+
+else:
+    print("training and test set need to be the same length")
