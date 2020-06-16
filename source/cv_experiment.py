@@ -15,7 +15,7 @@ from experiment import Experiment
 from utils import load_statistics,save_statistics,find_best_epoch
 
 class CVExperiment(nn.Module):
-    def __init__(self, exp_name,exp_params,train_data=None,test_data=None,k=5,verbose=True):
+    def __init__(self, exp_name,exp_params,train_data=None,test_data=None,verbose=True,k=5):
 
         super(CVExperiment, self).__init__()
         self.experiment_folder = os.path.abspath(exp_name)
