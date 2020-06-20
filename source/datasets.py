@@ -4,8 +4,6 @@ from torch.utils.data import Dataset
 import h5py
 import random
 
-
-
 class LCs(Dataset):
     def __init__(self, lc_length, dataset_h5,n_channels=2,transform=None):
 
@@ -55,6 +53,7 @@ class LCs(Dataset):
             return self.transform(sample)
         else:
             return sample
+
         
     def get_items(self,idxs):
         X = self.X[idxs]

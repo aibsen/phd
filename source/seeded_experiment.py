@@ -37,17 +37,17 @@ class SeededExperiment(nn.Module):
         self.k=k
         
         if seeds:
-            self.seeds = seeds
+            self.seeds = np.array(seeds)
         else :
             self.seeds = np.random.randint(low,high,n_seeds)
 
+        self.train_data = train_data
         if train_data:
             self.train_length = len(train_data)
-            self.train_data = train_data
 
+        self.test_data = test_data
         if test_data:
             self.test_length = len(test_data)
-            self.test_data = test_data
 
     def save_seed_statistics(self,summary_list):
         for summary_file in summary_list:
@@ -72,8 +72,9 @@ class SeededExperiment(nn.Module):
             # print(seed)
             torch.manual_seed(seed=seed)
             print("Starting experiment, seed: "+str(seed))
-            print(self.experiment_folder+"/seed_"+str(seed))
-            experiment = CVExperiment(self.experiment_folder+"/seed_"+str(seed), 
+            exp_name = self.experiment_folder+"/seed_"+str(seed)
+            print(exp_name)
+            experiment = CVExperiment(exp_name, 
                 self.exp_params, 
                 self.train_data,
                 self.test_data,
@@ -90,3 +91,9 @@ class SeededExperiment(nn.Module):
 
         if self.verbose:
             print("--- %s seconds ---" % (time.time() - start_time))
+    
+    def get_seeds_from_folders(self):
+        rootdir = self.experiment_folder
+        subdirs = os.walk(rootdir).__next__()[1]
+        subdirs = filter(lambda s: True if 'seed' in s else False, subdirs) 
+        return list(map(lambda s: s.split("_")[1],subdirs))

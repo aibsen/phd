@@ -65,7 +65,7 @@ def construct_vectors(sns,filename,meta_file=None):
     #ensure there is at least 3 points per band
     group_by_id_band = sn_enough.groupby(['id','band'])['time'].agg(['count']).rename(columns = lambda x : 'time_' + x).reset_index()
     #drop all lcs that have less than 3 points
-    at_least_3 = group_by_id_band[group_by_id_band.time_count>=5]
+    at_least_3 = group_by_id_band[group_by_id_band.time_count>=25]
     #drop also their companion band
     band_counts = at_least_3.groupby(['id']).count().reset_index()
     band_counts = band_counts[band_counts.time_count==2]
@@ -85,12 +85,13 @@ def construct_vectors(sns,filename,meta_file=None):
     count = 0
     print(tags_enough)
     max_length = group_by_id.time_diff.max()
-    max_scaled_length = int(np.ceil(328*max_length/328))
+    max_scaled_length = int(np.ceil(128*max_length/128))
     X=np.zeros((tags_enough.shape[0],4,max_scaled_length+2))
     print(max_scaled_length)
     print(max_length)
     print(sn_enough.id.unique().shape)
     print(tags_enough.shape[0])
+    print(X.shape)
     obids = tags_enough.id.unique()
     for n,objid in enumerate(obids):
         lc = sn_enough[sn_enough.id == objid]
@@ -100,10 +101,11 @@ def construct_vectors(sns,filename,meta_file=None):
         lc_length = group_by_id.loc[group_by_id.id == objid, 'time_diff'].values[0]
         lc_start = group_by_id.loc[group_by_id.id == objid, 'time_min'].values[0]
         lc_stop = group_by_id.loc[group_by_id.id == objid, 'time_max'].values[0]
-        scaled_lc_length=int(np.ceil(328*lc_length/328))
+        scaled_lc_length=int(np.ceil(128*lc_length/128))
         lc_step = lc_length/scaled_lc_length
-        
+        print(scaled_lc_length)
         new_x = np.arange(lc_start,lc_stop+1,lc_step)
+        print(new_x.shape)
         X[n,0,0:scaled_lc_length+2] = np.interp(new_x,lc_r.time, lc_r.flux)
         X[n,1,0:scaled_lc_length+2] = np.interp(new_x,lc_g.time, lc_g.flux)
 
@@ -136,6 +138,6 @@ def construct_vectors(sns,filename,meta_file=None):
     save_vectors(dataset,filename)
 
 
-metafile="real_data_tags_30do_careful_count40.csv"
-filename = "real_data_30do_careful_count40.h5"
+metafile="real_data_tags_count25_careful.csv"
+filename = "real_data_count25_careful.h5"
 construct_vectors(sns,filename,metafile)

@@ -15,8 +15,15 @@ from torchvision import transforms
 from transforms import RandomCrop,ZeroPad,RightCrop
 
 results_dir = "../../results/"
-interpolated_dataset_filename = "../../data/training/linearly_interpolated/unbalanced_dataset_m_realzp_128.h5"
-real_dataset_filename = "../../data/testing/real_data_30_careful.h5"
+# real_datasets = [
+#     "../../data/testing/real_data_count5_careful.h5",
+#     "../../data/testing/real_data_count10_careful.h5",
+#     "../../data/testing/real_data_count15_careful.h5",
+#     "../../data/testing/real_data_count20_careful.h5",
+#     "../../data/testing/real_data_count25_careful.h5",
+#     "../../data/testing/real_data_count30_careful.h5",
+#     "../../data/testing/real_data_count35_careful.h5",
+#     "../../data/testing/real_data_count40_careful.h5"]
 
 lc_length = 128
 num_epochs = 30
@@ -27,34 +34,19 @@ batch_size = 64
 n_seeds = 5
 
 ############ PART 1 ###############
-#training using complete simulated light curves and cropped light curves (1st bits) (50% + 25%+10%) (padded) 
-#testing using padded real light curves chopped. 10% of lcs
+#testing using padded real light curves chopped. 10% of lcs different test sets
 
-#load dataset
-train_dataset = LCs(lc_length, interpolated_dataset_filename)
-train_length = len(train_dataset)
-test_dataset = LCs(lc_length, real_dataset_filename)
-test_length = len(test_dataset)
-
-
-#apply transforms so we'll be training with 100, 50, 25 and 10 percent of light curves
-if train_dataset[0][0].shape == test_dataset[0][0].shape:
-    train_length1 = int(train_length/4)
-    train_length2 = int(train_length/4)
-    train_length3 = int(train_length/4)
-    train_length4 = train_length - train_length1 - train_length2 - train_length3
-    trd1, trd2, trd3, trd4  = torch.utils.data.random_split(train_dataset, [train_length1,train_length2, train_length3, train_length4])
-
-
-    for p,trd in list(zip([0.1,0.25,0.5],[trd1,trd2,trd3])):
-        crop=RandomCrop(int(lc_length*p),lc_length)
-        zeropad = ZeroPad(lc_length,int(lc_length*p))
-        composed = transforms.Compose([crop,zeropad])
-        trd.transform = composed
-
-    train_dataset = torch.utils.data.ConcatDataset([trd1,trd2,trd3,trd4])
-
-    input_shape = train_dataset[0][0].shape
+counts = [5,10,15,20,25,30,35,40]
+for count in counts: #interate over different test sets
+    c = str(count)
+    test_data_file = "../../data/testing/real_data_count{}_careful.h5".format(c)
+    test_results = "test_results_count{}.csv".format(c)
+    test_summary = "test_results_summary{}.csv".format(c)
+    
+    #load dataset
+    test_dataset = LCs(lc_length, test_data_file)
+    test_length = len(test_dataset)
+    input_shape = test_dataset[0][0].shape
 
     #define network params
     fcn_params = {
@@ -75,8 +67,8 @@ if train_dataset[0][0].shape == test_dataset[0][0].shape:
         "hidden_size":100,
         "batch_size":batch_size,
         "attention":"no_attention",
-        "da":50,
-        "r":1
+        "da":20,
+        "r":3
         }
     grusa_params = {
         "input_shape": input_shape,
@@ -95,20 +87,23 @@ if train_dataset[0][0].shape == test_dataset[0][0].shape:
         "use_gpu" : use_gpu,
         "batch_size" : batch_size
     }
+
     #2.C RNN
-    exp_name = "exp1_p2_gru"
+    exp_name = "exp2_p1_gru"
     gru = GRU1D(gru_params)
     exp_params["network_model"] = gru
     experiment = SeededExperiment(
         results_dir+exp_name,
         exp_params,
-        train_data=train_dataset,
         test_data=test_dataset,
         verbose=True,
         n_seeds=n_seeds)
+    
+    seeds = experiment.get_seeds_from_folders()
+    experiment.seeds = seeds
 
     start_time = time.time()
-    experiment.run_experiment()
+    experiment.run_experiment(test_results,test_summary)
     print("--- %s seconds ---" % (time.time() - start_time))
 
 
@@ -119,13 +114,14 @@ if train_dataset[0][0].shape == test_dataset[0][0].shape:
     experiment = SeededExperiment(
         results_dir+exp_name,
         exp_params,
-        train_data=train_dataset,
         test_data=test_dataset,
         verbose=True,
         n_seeds=n_seeds)
 
+    seeds = experiment.get_seeds_from_folders()
+    experiment.seeds = seeds
     start_time = time.time()
-    experiment.run_experiment()
+    experiment.run_experiment(test_results,test_summary)
     print("--- %s seconds ---" % (time.time() - start_time))
 
     #2.A FCN
@@ -135,12 +131,14 @@ if train_dataset[0][0].shape == test_dataset[0][0].shape:
     experiment = SeededExperiment(
         results_dir+exp_name,
         exp_params,
-        train_data=train_dataset,
         test_data=test_dataset,
         verbose=True,
         n_seeds=n_seeds)
+
+    seeds = experiment.get_seeds_from_folders()
+    experiment.seeds = seeds
     start_time = time.time()
-    experiment.run_experiment()
+    experiment.run_experiment(test_results,test_summary)
     print("--- %s seconds ---" % (time.time() - start_time))
 
     #2.B ResNet
@@ -150,16 +148,13 @@ if train_dataset[0][0].shape == test_dataset[0][0].shape:
     experiment = SeededExperiment(
         results_dir+exp_name,
         exp_params,
-        train_data=train_dataset,
         test_data=test_dataset,
         verbose=True,
         n_seeds=n_seeds)
 
+    seeds = experiment.get_seeds_from_folders()
+    experiment.seeds = seeds
     start_time = time.time()
-    experiment.run_experiment()
+    experiment.run_experiment(test_results,test_summary)
     print("--- %s seconds ---" % (time.time() - start_time))
 
-
-
-else:
-    print("training and test set need to be the same length")

@@ -109,14 +109,15 @@ class CVExperiment(nn.Module):
 
     def run_test_phase(self,test_results="test_results.csv",test_summary="test_summary.csv"):
         for k in np.arange(self.k):
-            exp_name = self.experiment_folds+"/fold_k"+str(k+1),
+            exp_name = self.experiment_folds+"/fold_k"+str(k+1)
+            print(exp_name)
             best_epoch = find_best_epoch(exp_name+"/result_outputs/summary.csv")
 
             experiment = Experiment(
-                network_model = self.params["network_model"],
+                network_model = self.exp_params["network_model"],
                 experiment_name = exp_name,
-                use_gpu = self.params["use_gpu"],
-                test_data = test_loader,
+                use_gpu = self.exp_params["use_gpu"],
+                test_data = self.test_loader,
                 best_idx = best_epoch,
                 verbose = self.verbose
             )

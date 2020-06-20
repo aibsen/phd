@@ -167,7 +167,7 @@ class Experiment(nn.Module):
             # if self.verbose:
             #     pbar_train = tqdm.tqdm(total=len(self.train_data))
             #     pbar_val = tqdm.tqdm(total=len(self.val_data))
-            with tqdm.tqdm(total=len(data)) as pbar_train:
+            with tqdm.tqdm(total=len(self.train_data)) as pbar_train:
                 for idx, (x, y,ids) in enumerate(self.train_data):
                     loss, accuracy,f1, p, r = self.run_train_iter(x=x, y=y)
                     current_epoch_metrics["train_loss"].append(loss)
@@ -179,7 +179,7 @@ class Experiment(nn.Module):
                     pbar_train.update(1)
                 # pbar_train.set_description("loss: {:.4f}, accuracy: {:.4f}, f1_score: {:.4f}".format(loss, accuracy, f1))
 
-            with tqdm.tqdm(total=len(data)) as pbar_val:
+            with tqdm.tqdm(total=len(self.val_data)) as pbar_val:
                 for x, y,ids in self.val_data:
                     loss, accuracy,f1,p,r,_ = self.run_evaluation_iter(x=x, y=y)
                     current_epoch_metrics["val_loss"].append(loss)

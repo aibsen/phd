@@ -65,7 +65,7 @@ class GRU1D(nn.Module):
         self.layer_dict['bn_1'] = nn.BatchNorm1d(self.params['hidden_size'])
         self.layer_dict['dropout'] = torch.nn.Dropout(p=0.2)
         self.layer_dict["self_attention"] = SelfAttention1D(self.params)
-        if self.params["r"] > 1:
+        if self.params["r"] > 1 and self.params["attention"]=="self_attention":
             self.layer_dict['linear'] = nn.Linear(in_features=self.params['hidden_size']*self.params["r"],out_features=self.params['num_output_classes'])
         else:
             self.layer_dict['linear'] = nn.Linear(in_features=self.params['hidden_size'],out_features=self.params['num_output_classes'])
