@@ -15,10 +15,24 @@ from utils import save_to_stats_pkl_file, load_from_stats_pkl_file, \
 
 
 class Experiment(nn.Module):
-    def __init__(self, network_model, experiment_name,metric="f1_score", num_epochs=100, learning_rate=1e-03, train_data=None, val_data=None,
-                 test_data=None, weight_decay_coefficient=0, use_gpu=True, continue_from_epoch=-1, num_output_classes=4, best_idx=0, verbose=True):
+    def __init__(self, network_model, 
+        experiment_name,metric="f1_score", 
+        num_epochs=100, 
+        learning_rate=1e-03,
+        batch_size = 64, 
+        train_data=None, 
+        val_data=None,
+        test_data=None,
+        balance_training_set=False,
+        weight_decay_coefficient=0, 
+        use_gpu=True, 
+        continue_from_epoch=-1, 
+        num_output_classes=4, 
+        best_idx=0, 
+        verbose=True):
 
         super(Experiment, self).__init__()
+
         if torch.cuda.is_available() and use_gpu:
             self.device = torch.device('cuda')
             os.environ["CUDA_VISIBLE_DEVICES"] = "0"
@@ -35,9 +49,30 @@ class Experiment(nn.Module):
         self.model = network_model
         self.model.to(self.device)
         self.model.reset_parameters()
-        self.train_data = train_data
-        self.val_data = val_data
-        self.test_data = test_data
+        self.num_output_classes = num_output_classes
+
+
+        if train_data and val_data:
+            if balance_training_set:
+                weights, num_samples = self.calculate_balance_weights(train_data)
+                sampler = torch.utils.data.sampler.WeightedRandomSampler(weights, num_samples, replacement=False)                     
+                train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, sampler=sampler)     
+            else:
+                train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=True)
+
+            val_loader = torch.utils.data.DataLoader(val_data, batch_size=batch_size, shuffle=True)
+            self.train_data = train_loader
+            self.val_data = val_loader
+        else:
+            self.train_data = None
+            self.val_data = None
+
+        if test_data:
+            test_loader = torch.utils.data.DataLoader(test_data,batch_size=batch_size,shuffle=True)
+            self.test_data = test_loader
+        else:
+            self.test_data = None
+
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate, amsgrad=False,
                                     weight_decay=weight_decay_coefficient)
 
@@ -57,7 +92,6 @@ class Experiment(nn.Module):
             os.mkdir(self.experiment_saved_models)  # create the experiment saved models directory
 
         self.num_epochs = num_epochs
-        self.num_output_classes = num_output_classes
         self.criterion = nn.CrossEntropyLoss().to(self.device)  # send the loss computation to the GPU
 
         if continue_from_epoch != -1:  # if continue from epoch is not -1 then
@@ -71,6 +105,15 @@ class Experiment(nn.Module):
                 self.starting_epoch = 0
         else:
             self.starting_epoch = 0
+
+    def calculate_balance_weights(self, train_data):
+        counts = train_data.get_samples_per_class(self.num_output_classes)
+        weights_per_class = 1./counts
+        labels = train_data.get_all_labels()
+        weights = weights_per_class[labels]
+        num_samples = counts.min()*self.num_output_classes
+        return weights, int(num_samples)
+
 
     def run_train_iter(self, x, y):
         self.train()
@@ -99,13 +142,13 @@ class Experiment(nn.Module):
         p,r,f1_score,s = precision_recall_fscore_support(y_cpu,predicted_cpu, average='weighted', labels=np.unique(predicted_cpu))
         return loss, accuracy,f1_score,p,r,out.data
 
-    def save_model(self, model_save_dir, model_save_name, model_idx, best_validation_model_idx,
-                   best_validation_model_acc, best_validation_model_f1):
+    def save_model(self, model_save_dir, model_save_name, model_idx, best_validation_model_idx):
+                #    best_validation_model_acc, best_validation_model_f1):
         state = dict()
         state['network'] = self.model.state_dict()  # save network parameter and other variables.
         state['best_val_model_idx'] = best_validation_model_idx  # save current best val idx
-        state['best_val_model_acc'] = best_validation_model_acc  # save current best val acc
-        state['best_val_model_f1'] = best_validation_model_f1  # save current best val acc
+        # state['best_val_model_acc'] = best_validation_model_acc  # save current best val acc
+        # state['best_val_model_f1'] = best_validation_model_f1  # save current best val acc
         torch.save(state, f=os.path.join(model_save_dir, "{}_{}".format(model_save_name, str(
             model_idx))))
 
@@ -115,7 +158,7 @@ class Experiment(nn.Module):
             print(filename)
         state = torch.load(f=filename)
         self.model.load_state_dict(state_dict=state['network'])
-        return state['best_val_model_idx'], state['best_val_model_acc'], state['best_val_model_f1']
+        return state['best_val_model_idx']#, state['best_val_model_acc'], state['best_val_model_f1']
 
     def run_test_phase(self, data, results_filename, summary_filename):
         #getting evaluation metrics for best epoch model only
@@ -193,21 +236,24 @@ class Experiment(nn.Module):
 
             if self.metric == "accuracy":
                 val_mean_accuracy = np.mean(current_epoch_metrics['val_acc'])
-                if val_mean_accuracy > self.best_val_model_acc:
-                    self.best_val_model_acc = val_mean_accuracy
+                # if val_mean_accuracy > self.best_val_model_acc:
+                if val_mean_accuracy > self.best_val_model_idx:
+                    # self.best_val_model_acc = val_mean_accuracy
                     self.best_val_model_idx = epoch_idx
 
             elif self.metric == "f1_score":
                 val_mean_f1 = np.mean(current_epoch_metrics['val_f1'])
-                if val_mean_f1 > self.best_val_model_f1:
-                    self.best_val_model_f1 = val_mean_f1
+                # if val_mean_f1 > self.best_val_model_f1:
+                if val_mean_f1 > self.best_val_model_idx:
+                    # self.best_val_model_f1 = val_mean_f1
                     self.best_val_model_idx = epoch_idx
 
             self.save_model(model_save_dir=self.experiment_saved_models,
                 model_save_name="train_model_"+self.metric, model_idx=epoch_idx,
                 best_validation_model_idx=self.best_val_model_idx,
-                best_validation_model_acc=self.best_val_model_acc,
-                best_validation_model_f1=self.best_val_model_f1)
+                # best_validation_model_acc=self.best_val_model_acc,
+                # best_validation_model_f1=self.best_val_model_f1
+                )
 
             for key, value in current_epoch_metrics.items():
 

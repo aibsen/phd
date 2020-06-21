@@ -35,26 +35,40 @@ class LCs(Dataset):
     def __getitem__(self, idx):
 
         if self.X is None:
-            try:
-                with h5py.File(self.dataset_h5,'r') as f:
-                    X = f["X"][:,0:self.n_channels,0:self.lc_length]
-                    Y = f["Y"]
-                    ids = f["ids"]
-                    self.X = torch.tensor(X, device = self.device, dtype=torch.float)
-                    self.ids = torch.tensor(ids, device = self.device, dtype=torch.int)
-                    self.Y = torch.tensor(Y, device = self.device, dtype=torch.long)
-            except Exception as e:
-                print(e)
-
+            self.load_data_into_memory()
         sample = self.X[idx],self.Y[idx], self.ids[idx]
-        # t=torch.cuda.get_device_properties(0).total_memory
-        # print(t)
         if self.transform:
             return self.transform(sample)
         else:
             return sample
 
-        
+    def load_data_into_memory(self):
+        try:
+            with h5py.File(self.dataset_h5,'r') as f:
+                X = f["X"][:,0:self.n_channels,0:self.lc_length]
+                Y = f["Y"]
+                ids = f["ids"]
+                self.X = torch.tensor(X, device = self.device, dtype=torch.float)
+                self.ids = torch.tensor(ids, device = self.device, dtype=torch.int)
+                self.Y = torch.tensor(Y, device = self.device, dtype=torch.long)
+        except Exception as e:
+            print(e)
+
+    def get_samples_per_class(self,n_classes):
+        if self.Y is None:
+            self.load_data_into_memory()
+        self.n_classes = n_classes
+        counts = torch.zeros(n_classes)
+        for i in np.arange(n_classes):
+            idx = torch.where(self.Y == i)[0]
+            counts[i] = len(self.Y[idx])
+        return counts
+
+    def get_all_labels(self):
+        if self.Y is None:
+            self.load_data_into_memory()
+        return self.Y
+
     def get_items(self,idxs):
         X = self.X[idxs]
         Y = self.Y[idxs]

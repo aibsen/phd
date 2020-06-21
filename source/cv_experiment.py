@@ -45,7 +45,6 @@ class CVExperiment(nn.Module):
         self.test_data = test_data
         if test_data:
             self.test_length = len(test_data)
-            self.test_loader = torch.utils.data.DataLoader(self.test_data,batch_size=self.exp_params["batch_size"],shuffle=True)
         else:
             self.test_loader=None
 
@@ -80,15 +79,9 @@ class CVExperiment(nn.Module):
     def run_train_phase(self, test_results="test_results.csv", test_summary="test_summary.csv"):
         for k,(tr,val) in enumerate(self.kfs):
 
-            train_dataset = torch.utils.data.Subset(self.train_data, tr)
-            val_dataset = torch.utils.data.Subset(self.train_data, val)
-            # print(len(train_dataset))
-            # print(len(val_dataset))
-            # print("")
-
-            train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=self.exp_params["batch_size"], shuffle=True)
-            val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=self.exp_params["batch_size"], shuffle=True)
-
+            train_dataset = torch.utils.data.Subset(self.train_data, tr).dataset
+            val_dataset = torch.utils.data.Subset(self.train_data, val).dataset
+         
             experiment = Experiment(
                 network_model = self.exp_params["network_model"],
                 experiment_name = self.experiment_folds+"/fold_k"+str(k+1),
@@ -96,9 +89,11 @@ class CVExperiment(nn.Module):
                 learning_rate = self.exp_params["learning_rate"],
                 weight_decay_coefficient = self.exp_params["weight_decay_coefficient"],
                 use_gpu = self.exp_params["use_gpu"],
-                train_data = train_loader,
-                val_data = val_loader,
-                test_data = self.test_loader,
+                batch_size = self.exp_params["batch_size"],
+                balance_training_set = self.exp_params["balance_training_set"],
+                train_data = train_dataset,
+                val_data = val_dataset,
+                test_data = self.test_data,
                 verbose = self.verbose
             )
 
@@ -117,7 +112,7 @@ class CVExperiment(nn.Module):
                 network_model = self.exp_params["network_model"],
                 experiment_name = exp_name,
                 use_gpu = self.exp_params["use_gpu"],
-                test_data = self.test_loader,
+                test_data = self.test_data,
                 best_idx = best_epoch,
                 verbose = self.verbose
             )
