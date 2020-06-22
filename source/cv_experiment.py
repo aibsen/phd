@@ -79,8 +79,8 @@ class CVExperiment(nn.Module):
     def run_train_phase(self, test_results="test_results.csv", test_summary="test_summary.csv"):
         for k,(tr,val) in enumerate(self.kfs):
 
-            train_dataset = torch.utils.data.Subset(self.train_data, tr).dataset
-            val_dataset = torch.utils.data.Subset(self.train_data, val).dataset
+            train_dataset = torch.utils.data.Subset(self.train_data, tr)
+            val_dataset = torch.utils.data.Subset(self.train_data, val)
          
             experiment = Experiment(
                 network_model = self.exp_params["network_model"],

@@ -55,7 +55,7 @@ class Experiment(nn.Module):
         if train_data and val_data:
             if balance_training_set:
                 weights, num_samples = self.calculate_balance_weights(train_data)
-                sampler = torch.utils.data.sampler.WeightedRandomSampler(weights, num_samples, replacement=False)                     
+                sampler = torch.utils.data.sampler.WeightedRandomSampler(weights, num_samples)                     
                 train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, sampler=sampler)     
             else:
                 train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=True)
@@ -107,12 +107,17 @@ class Experiment(nn.Module):
             self.starting_epoch = 0
 
     def calculate_balance_weights(self, train_data):
-        counts = train_data.get_samples_per_class(self.num_output_classes)
-        weights_per_class = 1./counts
-        labels = train_data.get_all_labels()
+        print("bubip")
+        counts = torch.zeros(self.num_output_classes)
+        labels = torch.zeros(len(train_data), dtype=torch.long)
+        for i,item in enumerate(train_data):
+            counts[item[1]] +=1 
+            labels[i] = item[1]
+
+        weights_per_class = 1/counts
         weights = weights_per_class[labels]
-        num_samples = counts.min()*self.num_output_classes
-        return weights, int(num_samples)
+        num_samples = int(counts.min()*self.num_output_classes)
+        return weights, num_samples
 
 
     def run_train_iter(self, x, y):
