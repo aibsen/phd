@@ -15,16 +15,6 @@ from torchvision import transforms
 from transforms import RandomCrop,ZeroPad,RightCrop
 
 results_dir = "../../results/"
-# real_datasets = [
-#     "../../data/testing/real_data_count5_careful.h5",
-#     "../../data/testing/real_data_count10_careful.h5",
-#     "../../data/testing/real_data_count15_careful.h5",
-#     "../../data/testing/real_data_count20_careful.h5",
-#     "../../data/testing/real_data_count25_careful.h5",
-#     "../../data/testing/real_data_count30_careful.h5",
-#     "../../data/testing/real_data_count35_careful.h5",
-#     "../../data/testing/real_data_count40_careful.h5"]
-
 lc_length = 128
 num_epochs = 30
 use_gpu = True
@@ -36,12 +26,16 @@ n_seeds = 5
 ############ PART 1 ###############
 #testing using padded real light curves chopped. 10% of lcs different test sets
 
-counts = [5,10,15,20,25,30,35,40]
+counts = [3,5,10,15,20,25,30]
+# counts = [10]
 for count in counts: #interate over different test sets
     c = str(count)
-    test_data_file = "../../data/testing/real_data_count{}_careful.h5".format(c)
-    test_results = "test_results_count{}.csv".format(c)
-    test_summary = "test_results_summary{}.csv".format(c)
+    # test_data_file = "../../data/testing/real_data_30do_careful_count{}.h5".format(c)
+    test_data_file = "../../data/testing/27-06-2020-sns/real_data_30do_count{}.h5".format(c)
+    test_results = "test_results_new_count{}.csv".format(c)
+    test_summary = "test_results_new_summary{}.csv".format(c)
+    # test_results = "dummy.csv".format(c)
+    # test_summary = "dummy_summary.csv".format(c)
     
     #load dataset
     test_dataset = LCs(lc_length, test_data_file)
@@ -67,8 +61,8 @@ for count in counts: #interate over different test sets
         "hidden_size":100,
         "batch_size":batch_size,
         "attention":"no_attention",
-        "da":20,
-        "r":3
+        "da":50,
+        "r":1
         }
     grusa_params = {
         "input_shape": input_shape,
@@ -89,7 +83,7 @@ for count in counts: #interate over different test sets
     }
 
     #2.C RNN
-    exp_name = "exp2_p1_gru"
+    exp_name = "exp2_p2_gru"
     gru = GRU1D(gru_params)
     exp_params["network_model"] = gru
     experiment = SeededExperiment(
@@ -108,7 +102,7 @@ for count in counts: #interate over different test sets
 
 
     #2.D RNN-attention
-    exp_name = "exp2_p1_grusa"
+    exp_name = "exp2_p2_grusa"
     grusa = GRU1D(grusa_params)
     exp_params["network_model"] = grusa
     experiment = SeededExperiment(
@@ -125,7 +119,7 @@ for count in counts: #interate over different test sets
     print("--- %s seconds ---" % (time.time() - start_time))
 
     #2.A FCN
-    exp_name = "exp2_p1_fcn"
+    exp_name = "exp2_p2_fcn"
     fcn = FCNN1D(fcn_params)
     exp_params["network_model"] = fcn
     experiment = SeededExperiment(
@@ -142,7 +136,7 @@ for count in counts: #interate over different test sets
     print("--- %s seconds ---" % (time.time() - start_time))
 
     #2.B ResNet
-    exp_name = "exp2_p1_resnet"
+    exp_name = "exp2_p2_resnet"
     resnet = ResNet1D(resnet_params)
     exp_params["network_model"] = resnet
     experiment = SeededExperiment(

@@ -3,6 +3,15 @@ import pandas as pd
 import numpy as np
 import h5py
 
+def filter_metadata_by_type(metadata,types_I_want):
+#receives a dict with of types by name as provided by TNS and the numerical tags I want to give them
+    metadata = metadata[metadata["Obj. Type"].isin(types_I_want.keys())]
+    for k,v in types_I_want.items():
+        metadata.loc[metadata["Obj. Type"]==k,"tag"] = v
+    return metadata
+
+
+
 #receives a filename that contains the simsurvey simulated lightcurves and returns
 # a dataframe with the light curves with a sensible format for easier handling.
 def pkl_to_df(pkl_filename, first_id = 0):

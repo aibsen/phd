@@ -107,7 +107,6 @@ class Experiment(nn.Module):
             self.starting_epoch = 0
 
     def calculate_balance_weights(self, train_data):
-        print("bubip")
         counts = torch.zeros(self.num_output_classes)
         labels = torch.zeros(len(train_data), dtype=torch.long)
         for i,item in enumerate(train_data):
@@ -175,8 +174,8 @@ class Experiment(nn.Module):
 
         # if self.verbose:
         #     pbar = tqdm.tqdm(total=len(data))
-        with tqdm.tqdm(total=len(data)) as pbar:
-            for x, y, ids in data:
+        with tqdm.tqdm(total=len(self.test_data)) as pbar:
+            for x, y, ids in self.test_data:
                 loss, accuracy,f1,p,r,results = self.run_evaluation_iter(x=x,y=y)
                 metrics["loss"].append(loss)
                 metrics["acc"].append(accuracy)
