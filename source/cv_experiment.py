@@ -117,7 +117,7 @@ class CVExperiment(nn.Module):
                 verbose = self.verbose
             )
             start_time = time.time()
-            experiment.run_test_phase(self.test_data,test_results,test_summary)
+            experiment.run_experiment(test_results,test_summary)
             if self.verbose:
                 print("--- %s seconds ---" % (time.time() - start_time))
 

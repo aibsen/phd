@@ -70,6 +70,7 @@ class Experiment(nn.Module):
         if test_data:
             test_loader = torch.utils.data.DataLoader(test_data,batch_size=batch_size,shuffle=True)
             self.test_data = test_loader
+
         else:
             self.test_data = None
 
@@ -174,8 +175,8 @@ class Experiment(nn.Module):
 
         # if self.verbose:
         #     pbar = tqdm.tqdm(total=len(data))
-        with tqdm.tqdm(total=len(self.test_data)) as pbar:
-            for x, y, ids in self.test_data:
+        with tqdm.tqdm(total=len(data)) as pbar:
+            for x, y, ids in data:
                 loss, accuracy,f1,p,r,results = self.run_evaluation_iter(x=x,y=y)
                 metrics["loss"].append(loss)
                 metrics["acc"].append(accuracy)
