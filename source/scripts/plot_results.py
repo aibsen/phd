@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import os, sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from sklearn.metrics import confusion_matrix
+import scipy.stats as stats
+from seeded_experiment import SeededExperiment
 # from plot_utils import *
 
 
@@ -45,7 +47,7 @@ def plot_cms(files, rows, cols):
 
     plt.show()
 
-def plot_cm(ax,true_targets, predictions, normalized=True):
+def plot_cm(ax,true_targets, predictions, normalized=False):
     # fig = plt.figure()
     # ax = fig.add_subplot(111)
     cm=confusion_matrix(true_targets,predictions)
@@ -97,12 +99,70 @@ def plot_train_val_f1s(filenames,n_epochs,rows,cols):
     plt.setp(ax, ylim=custom_ylim)
     plt.show()
 
+
+
 results_dir = "../../results/"
 exp=2
-part =1
+part =2
 exp_names = list(map(lambda x: x.format(exp,part),["exp{}_p{}_fcn", "exp{}_p{}_resnet", "exp{}_p{}_gru", "exp{}_p{}_grusa"]))
-filenames = list(map(lambda x: results_dir+x+"/result_outputs/test_results.csv",exp_names))
-print(filenames) 
-plot_cms(filenames,1,len(filenames))
-# filenames2 = list(map(lambda x: results_dir+x+"/result_outputs/summary.csv",exp_names))
-# plot_train_val_f1s(filenames2,100,4,1)
+# # filenames = list(map(lambda x: results_dir+x+"/result_outputs/test_results.csv",exp_names))
+# # print(filenames) 
+# # plot_cms(filenames,1,len(filenames))
+# # filenames2 = list(map(lambda x: results_dir+x+"/result_outputs/summary.csv",exp_names))
+# # plot_train_val_f1s(filenames2,100,4,1)
+# count = 3
+# test_results="test_results_new_count{}.csv".format(count)
+# test_summary="test_results_new_summary{}.csv".format(count)
+# filenames = list(map(lambda x: SeededExperiment(results_dir+x).get_best_results((test_results, test_summary)[0]),exp_names))
+# plot_cms(filenames,1,len(filenames))
+# # best, r_f = se.get_best_results("test_results_new_count3.csv", "test_results_new_summary3.csv")
+# # print(best)
+# # print(r_f)
+# # plot_cm()
+
+
+# metrics = list(map(lambda x: SeededExperiment(results_dir+x).get_all_metrics(), exp_names))
+# print(metrics)
+# print(filenames)
+colors =["#877cb2","#e37b5f","#aa4773","#47a5aa"]
+names = ["FCN", "ResNet", "RNN", "RNN-SA"]
+
+
+for i, exp in enumerate(exp_names):
+    print(exp)
+    se = SeededExperiment(results_dir+exp)
+    metric = se.get_all_metrics(metric="acc",summary_filename="test_results_new_summary20.csv")
+    print(metric.max())
+    if i == 0:
+        metrics = np.zeros((metric.size,len(exp_names)))
+        metrics[:,0] = metric
+    else:
+        metrics[:,i] = metric
+ 
+
+n, bins, patches = plt.hist(metrics, 10, density=False,color=colors,alpha=0.7)
+for i in np.arange(len(exp_names)):
+
+    mu = np.mean(metrics[:,i])
+    sigma = np.std(metrics[:,i])
+    x = np.linspace(mu - 5*sigma, mu + 5*sigma, 100)
+    # x = np.linspace(min(metrics[:,i]), max(metrics[:,i]), 100)
+    dx = bins[1] - bins[0]
+    scale = metrics.shape[0]*dx
+    mustr = "%.3f" % mu
+    sigmastr = "%.3f" % sigma
+    label = ', $\mu={},\ \sigma={}$'.format(mustr,sigmastr)
+    plt.plot(x, stats.norm.pdf(x, mu, sigma)*scale, color=colors[i],label=names[i]+label, alpha=0.8)
+
+# print(metrics[:,3])
+plt.xlim(right=1)
+plt.xlim(left=0)
+plt.xticks([0.1,0.2,0.3,0.40,0.5,0.6,0.7,0.8,0.9,1])
+plt.yticks(np.arange(0,30,5))
+plt.ylim(top=26)
+
+plt.legend()
+
+# print(metric)
+# plt.plot(np.arange(len(metric)),metric,"+")
+plt.show()

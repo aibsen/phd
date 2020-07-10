@@ -16,7 +16,7 @@ from utils import load_statistics,save_statistics,find_best_epoch
 import pandas as pd
 
 class CVExperiment(nn.Module):
-    def __init__(self, exp_name,exp_params,train_data=None,test_data=None,verbose=True,k=5):
+    def __init__(self, exp_name,exp_params=None,train_data=None,test_data=None,verbose=True,k=5):
 
         super(CVExperiment, self).__init__()
         self.experiment_folder = os.path.abspath(exp_name)
@@ -122,5 +122,26 @@ class CVExperiment(nn.Module):
                 print("--- %s seconds ---" % (time.time() - start_time))
 
 
+    def get_folds_from_folders(self):
+        rootdir = self.experiment_folds
+        folds = os.walk(rootdir).__next__()[1]
+        return folds
+
+
+    def get_best_fold(self,summary_filename="test_summary.csv",metric="f1"):
+        folds = self.get_folds_from_folders()
+        best_k = -1
+        best_metric = -1
+        for fold in folds:
+            summary = self.experiment_folds+"/"+fold+"/result_outputs/"+summary_filename
+            summary_df=pd.read_csv(summary)
+            new_metric = summary_df[metric].values
+            # print(summary_df)
+            # print(new_metric)
+            if new_metric>best_metric: #this would only work for acc and f1
+                best_metric = new_metric
+                best_k = fold[-1] #only works for 9 or less folds
+        
+        return best_k, best_metric
 
     

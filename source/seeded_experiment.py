@@ -17,7 +17,7 @@ import pandas as pd
 
 class SeededExperiment(nn.Module):
     
-    def __init__(self, exp_name,exp_params,
+    def __init__(self, exp_name,exp_params=None,
         seeds=None,train_data=None,test_data=None,verbose=True,n_seeds=10,low=0,high=10e+5,k=5):
 
         super(SeededExperiment, self).__init__()
@@ -97,3 +97,39 @@ class SeededExperiment(nn.Module):
         subdirs = os.walk(rootdir).__next__()[1]
         subdirs = filter(lambda s: True if 'seed' in s else False, subdirs) 
         return list(map(lambda s: s.split("_")[1],subdirs))
+
+    def get_best_results(self, results_filename="test_results.csv", summary_filename="test_summary.csv"):
+    #returns the classification results for best iteration
+        seeds = self.get_seeds_from_folders()     
+        best_seed = -1
+        best_k = -1
+        best_results = -1
+        for seed in seeds:
+            exp_name = self.experiment_folder+"/seed_"+str(seed)
+            cve = CVExperiment(exp_name)
+            k, new_best_results = cve.get_best_fold(summary_filename)
+            if new_best_results > best_results:
+                best_k = k
+                new_best_results = best_results
+                best_seed = seed
+        r_file = self.experiment_folder+"/seed_"+str(best_seed)+"/folds/fold_k"+str(best_k)+"/result_outputs/"+results_filename
+        # results = pd.read_csv(r_file)
+        return seed, k, r_file
+
+    def get_all_metrics(self,metric="f1",summary_filename="test_summary.csv"):
+    #given a metric it goes through all exp folders and gets the relevant metric
+        seeds = self.get_seeds_from_folders()
+        summaries = None
+        for seed in seeds:
+            exp_name = self.experiment_folder+"/seed_"+str(seed)
+            cve = CVExperiment(exp_name)
+            folds = cve.get_folds_from_folders()
+            for fold in folds:
+                summary = cve.experiment_folds+"/"+fold+"/result_outputs/"+summary_filename
+                s = pd.read_csv(summary)
+                if summaries is None:
+                    summaries = s
+                else :
+                    summaries = pd.concat([summaries,s])
+
+        return summaries[metric].values                
