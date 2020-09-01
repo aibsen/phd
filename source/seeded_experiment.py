@@ -131,5 +131,4 @@ class SeededExperiment(nn.Module):
                     summaries = s
                 else :
                     summaries = pd.concat([summaries,s])
-
         return summaries[metric].values                

@@ -99,18 +99,7 @@ def autolabel(ax,rects):
 
 # print(id_str)
 
-real_sns=None
-
-for i in np.arange(65):
-    data_file = "{}000-{}000.csv".format(i,i+1)
-    print(data_file)
-    real_sns_new = pd.read_csv(current_real_data_dir+data_file,sep="\t")
-    if real_sns is not None:
-        real_sns = pd.concat([real_sns, real_sns_new])
-    else:
-        real_sns = real_sns_new
-    
-real_sns.to_csv("tns_search.csv",index=False)
-
-real_sns.columns = ["objid","time","flux","flux_err","band"]
-print(real_sns)
+data = current_real_data_dir+"metadata_4_types.csv"
+data = pd.read_csv(data)
+print(data.keys())
+print(data.describe())
