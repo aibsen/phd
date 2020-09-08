@@ -3,14 +3,21 @@ import pandas as pd
 import numpy as np
 import h5py
 
+# plasticc_sn_tags = {'90':0, '67':1, '52':2, '42':3, '62': 4, '95': 5}
+plasticc_sn_tags =[90,67,52,42,62,95]
+
+def retag_plasticc(metadata):
+    #choosing supernovae only
+    sn_metadata = metadata[metadata["true_target"].isin(plasticc_sn_tags)].copy()
+    sn_metadata.loc[:,"true_target"] = [plasticc_sn_tags.index(tag) for tag in sn_metadata["true_target"]]
+    return sn_metadata
+
 def filter_metadata_by_type(metadata,types_I_want):
 #receives a dict with of types by name as provided by TNS and the numerical tags I want to give them
     metadata = metadata[metadata["Obj. Type"].isin(types_I_want.keys())]
     for k,v in types_I_want.items():
         metadata.loc[metadata["Obj. Type"]==k,"tag"] = v
     return metadata
-
-
 
 #receives a filename that contains the simsurvey simulated lightcurves and returns
 # a dataframe with the light curves with a sensible format for easier handling.
@@ -110,6 +117,71 @@ def create_interpolated_vectors(data, tags, length, dtype='sim', n_channels=2):
 
     elif n_channels == 2:
         return X_per_band, obj_ids, tags.type.values
+
+def create_interpolated_vectors_plasticc(data, tags, length, dtype='sim', n_channels=6):
+    obj_ids = tags.object_id.unique()
+    data_cp = data.copy()
+    data_cp['ob_p']=data.object_id*10+data.passband
+
+    #sanity check
+    print("there are",data_cp.object_id.unique().size, "objects")
+    print("there are",data_cp.ob_p.unique().size, "lightcurves")
+    print("is the n_lcs 6x n_objs?",data_cp.object_id.unique().size*6==data_cp.ob_p.unique().size)
+
+    #get dataframe with min and max mjd values per each object id
+    group_by_mjd = data_cp.groupby(['object_id'])['mjd'].agg(['min', 'max']).rename(columns = lambda x : 'time_' + x).reset_index()
+    merged = pd.merge(data_cp, group_by_mjd, how = 'left', on = 'object_id')
+
+    #sanity check
+    print("do I still have the same nobjs",merged.object_id.unique().size == data_cp.object_id.unique().size)
+
+    #scale mjd according to max mjd, min mjd and the desired length of the light curve (128)
+    merged['scaled_time'] = (length - 1) * (merged['mjd'] - merged['time_min'])/(merged['time_max']-merged['time_min'])
+    merged['count'] = 1
+    merged['cc'] = merged.groupby(['ob_p'])['count'].cumcount()
+    merged=merged.sort_values(['object_id','mjd'])
+    #sanity check
+    print("still?",merged.object_id.unique().size==data_cp.object_id.unique().size)
+
+    #reshape df so that for each row there's one lightcurve (6 rows per obj) and each column is a point of it
+    # there is two main columns also, for flux and for mjd
+    unstack = merged[['ob_p', 'scaled_time', 'flux', 'cc']].set_index(['ob_p', 'cc']).unstack()
+    print("still when unstacking?",unstack.shape[0]== data_cp.object_id.unique().size*6)
+    #transform above info into numpy arrays
+    time_uns = unstack['scaled_time'].values[..., np.newaxis]
+    flux_uns = unstack['flux'].values[..., np.newaxis]
+    time_flux = np.concatenate((time_uns, flux_uns), axis =2)
+    #create a mask to get points that are valid (not nan)
+    #do this for time dim only, since fluxes will be nan when times are also
+    nan_masks = ~np.isnan(time_flux)[:, :, 0]
+    x = np.arange(length)
+    n_lcs = time_flux.shape[0]
+    #here we'll store interpolated lcs
+    X = np.zeros((n_lcs, x.shape[0]))
+    t=range(n_lcs)
+    for i in t:
+        if nan_masks[i].any(): #if any point is real
+            X[i] = np.interp(x, time_flux[i][:, 0][nan_masks[i]], time_flux[i][:, 1][nan_masks[i]])
+        else:
+            X[i] = np.zeros_like(x)
+
+    n_objs = int(n_lcs/6)
+    #reshape vectors so the ones belonging to the same object are grouped into 6 channels
+    X_per_band = X.reshape((n_objs,6,length)).astype(np.float32)
+
+    #get distance for each point to nearest real point
+    X_void = np.zeros((n_lcs, x.shape[0]))
+    t=range(length)
+    for i in t:
+        X_void[:, i] = np.abs((unstack["scaled_time"] - i)).min(axis = 1).fillna(500)
+
+    #reshape vectors so the ones belonging to the same object are grouped into 6 channels
+    X_void_per_band = X_void.reshape((n_objs,6,length)).astype(np.float32)
+    vectors = np.concatenate((X_per_band,X_void_per_band),axis=1)
+    return vectors, obj_ids, tags.true_target.values
+
+
+
 
 def save_vectors(dataset, outputFile):
     hf=h5py.File(outputFile,'w')
