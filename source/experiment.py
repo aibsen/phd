@@ -29,7 +29,8 @@ class Experiment(nn.Module):
         continue_from_epoch=-1, 
         num_output_classes=4, 
         best_idx=0, 
-        verbose=True):
+        verbose=True,
+        cached_dataset=False):
 
         super(Experiment, self).__init__()
 

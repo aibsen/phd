@@ -136,46 +136,43 @@ class InefficientCachedLCs(Dataset):
 
 
 class CachedLCs(Dataset):
-    #this function needs a data_loader that ensures that the appropiate indexes are asked for. that is
-    #given a dataset of lenght L with that will be split in N chunks of size S, thsi data set will load into memmory
-    #S objects at a time and the data_loade should ask for all indexes within that chunk first and then move on to the indexes of a different chunk.
-    #otherwise it will still load but it will be extremely inefficient, as we will be loading chunks into memmory continually without reading them all.
+
+    """Loads chunks of data into memory minimizing the number of disk acceses.
+    Needs the custom CachedRandomSampler to work, otherwise it will do so very inefficiently, 
+    as it will continually loading chunks of data from disk without actually using them.
+    
+    Arguments:
+        lc_length : length of the lightcurves 
+        dataset_file : h5 file with the relevant dataset
+        data_cache_size : size of the chunks that will be read (in terms of number of objects)
+        transform : transformation to apply to samples
+    """
     def __init__(self,lc_length, dataset_file, data_cache_size=100000, transform=None):
 
         self.lc_length = lc_length
         self.device = torch.device('cuda')
-        self.data_cache = {}
+        self.X = None
+        self.Y = None
+        self.ids = None
         self.transform = transform
         self.data_cache_size = data_cache_size
         self.dataset_file = dataset_file
         self.dataset_length = 0
         self.n_chunks = 0
         self.low_idx = 0
-        self.high_idx = 0
-        self.chunks=[]
+        self.high_idx = -1
+        self.transform = transform
         try:
             with h5py.File(self.dataset_file,'r') as f:
                 X = f["X"]
                 Y = f["Y"]
                 ids = f["ids"]
                 self.dataset_length = len(ids)
+                # print(len(ids))
+                # print(len(Y))
+                # print(len(X))
                 self.n_chunks = np.ceil(self.dataset_length/self.data_cache_size)
 
-                self.chunks = list(np.arange(self.n_chunks))
-                first_chunk=np.random.randint(len(self.chunks))
-                self.current_chunk = first_chunk
-                #pop this chunk from the list of available ones
-                self.chunk.pop(first_chunk)
-
-                self.low_idx = first_chunk*data_cache_size
-                self.high_idx = (first_chunk+1)*data_cache_size if first_chunk != self.n_chunks else self.dataset_length
-                self.chunks[str(self.current_chunk)]=True
-
-                X = torch.tensor(X[self.low_idx:self.high_idx,:,0:self.lc_length], device = self.device, dtype=torch.float)
-                Y = torch.tensor(Y[self.low_idx:self.high_idx], device = self.device, dtype=torch.long)
-                ids = torch.tensor(self.ids[self.low_idx:self.high_idx], device = self.device, dtype=torch.int)
-                batch_sample = X, Y, ids
-                self.update_cache(batch_sample)
         except Exception as e:
             print(e)
 
@@ -184,29 +181,29 @@ class CachedLCs(Dataset):
 
     def __getitem__(self, idx):
         if idx <= self.high_idx and idx >=self.low_idx: #if index asked for is in cache, return it
+            # print(" ")
+            # print(idx)
             idx = int(idx-self.low_idx)
-            sample = self.data_cache['X'][idx], self.data_cache['Y'][idx], self.data_cache['ids'][idx]
-            return sample
+            # print(self.low_idx)
+            # print(idx)
+            # print(self.high_idx)
+            # print(" ")
+            return self.X[idx], self.Y[idx], self.ids[idx]
+
         else: # if index need is not in cache, need to load new chunk into memmory and call function again
             with h5py.File(self.dataset_file,'r') as f:
-                new_chunk = np.random.randint(len(self.chunks))
-                self.current_chunk = self.chunk.pop(new_chunk)
-                self.low_idx = self.current_chunk*self.data_cache_size
-                self.high_idx = (self.current_chunk+1)*self.data_cache_size if self.current_chunk != self.n_chunks else self.dataset_length
+                # print(idx)
+                current_chunk = np.floor(idx/self.data_cache_size)
+                # print(current_chunk)
+                self.low_idx = int(current_chunk*self.data_cache_size)
+                self.high_idx = int((current_chunk+1)*self.data_cache_size) if current_chunk != self.n_chunks else int(self.dataset_length-1)
                 X = f["X"][self.low_idx:self.high_idx,:,0:self.lc_length]
                 Y = f["Y"][self.low_idx:self.high_idx]
                 ids = f["ids"][self.low_idx:self.high_idx]
-                X = torch.tensor(X, device = self.device, dtype=torch.float)
-                Y = torch.tensor(Y, device = self.device, dtype=torch.long)
-                ids = torch.tensor(ids, device = self.device, dtype=torch.int)
-                batch_sample = X, Y, ids
-                self.update_cache(batch_sample)
-                self.__getitem__(idx)
+                self.X = torch.tensor(X, device = self.device, dtype=torch.float)
+                self.Y = torch.tensor(Y, device = self.device, dtype=torch.long)
+                self.ids = torch.tensor(ids, device = self.device, dtype=torch.int)
+                return self.__getitem__(idx)
 
-
-    def update_cache(self,sample):
-        self.data_cache['X'] = sample[0]
-        self.data_cache['Y'] = sample[1]
-        self.data_cache['ids'] = sample[2]
 
 
