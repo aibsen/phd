@@ -137,6 +137,7 @@ class InefficientCachedLCs(Dataset):
 
 class CachedLCs(Dataset):
 
+
     """Loads chunks of data into memory minimizing the number of disk acceses.
     Needs the custom CachedRandomSampler to work, otherwise it will do so very inefficiently, 
     as it will continually loading chunks of data from disk without actually using them.
@@ -168,9 +169,6 @@ class CachedLCs(Dataset):
                 Y = f["Y"]
                 ids = f["ids"]
                 self.dataset_length = len(ids)
-                # print(len(ids))
-                # print(len(Y))
-                # print(len(X))
                 self.n_chunks = np.ceil(self.dataset_length/self.data_cache_size)
 
         except Exception as e:
@@ -181,20 +179,16 @@ class CachedLCs(Dataset):
 
     def __getitem__(self, idx):
         if idx <= self.high_idx and idx >=self.low_idx: #if index asked for is in cache, return it
-            # print(" ")
-            # print(idx)
             idx = int(idx-self.low_idx)
-            # print(self.low_idx)
-            # print(idx)
-            # print(self.high_idx)
-            # print(" ")
-            return self.X[idx], self.Y[idx], self.ids[idx]
-
+            sample = self.X[idx], self.Y[idx], self.ids[idx]
+            if self.transform:
+                return self.transform(sample)
+            else:
+                return sample
+                
         else: # if index need is not in cache, need to load new chunk into memmory and call function again
             with h5py.File(self.dataset_file,'r') as f:
-                # print(idx)
                 current_chunk = np.floor(idx/self.data_cache_size)
-                # print(current_chunk)
                 self.low_idx = int(current_chunk*self.data_cache_size)
                 self.high_idx = int((current_chunk+1)*self.data_cache_size) if current_chunk != self.n_chunks else int(self.dataset_length-1)
                 X = f["X"][self.low_idx:self.high_idx,:,0:self.lc_length]

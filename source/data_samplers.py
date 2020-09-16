@@ -17,25 +17,23 @@ class CachedRandomSampler(Sampler):
         self.dataset_length = len(data_source)
         self.chunk_size = chunk_size 
         self.n_chunks = np.ceil(self.dataset_length/self.chunk_size)
-
+        print(self.dataset_length)
+        print(self.n_chunks)
     def __iter__(self):
         chunk_order = torch.randperm(int(self.n_chunks))
         it = torch.tensor([],dtype = torch.long)
-        print(chunk_order)
-        print(self.n_chunks)
         for i,chunk in enumerate(chunk_order):
-            print(chunk)
             shift = chunk*self.chunk_size
             if chunk == self.n_chunks-1:
                 limit = self.dataset_length-(self.n_chunks-1)*self.chunk_size
                 index_order = torch.randperm(int(limit))
-                print(limit)
+                print("bi")
             else:
                 index_order = torch.randperm(int(self.chunk_size))
+                print("be")
             indexes = index_order+shift
-            # print(indexes)
             it = torch.cat((it,indexes),0)
-        # print(it.tolist())
+            print("it")
         return iter(it.tolist())
 
     def __len__(self):

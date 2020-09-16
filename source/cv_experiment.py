@@ -90,7 +90,7 @@ class CVExperiment(nn.Module):
                 weight_decay_coefficient = self.exp_params["weight_decay_coefficient"],
                 use_gpu = self.exp_params["use_gpu"],
                 batch_size = self.exp_params["batch_size"],
-                balance_training_set = self.exp_params["balance_training_set"],
+                sampler = self.exp_params["sampler"],
                 train_data = train_dataset,
                 val_data = val_dataset,
                 test_data = self.test_data,
@@ -112,6 +112,8 @@ class CVExperiment(nn.Module):
                 network_model = self.exp_params["network_model"],
                 experiment_name = exp_name,
                 use_gpu = self.exp_params["use_gpu"],
+                batch_size = self.exp_params["batch_size"],
+                sampler = self.exp_params["sampler"],
                 test_data = self.test_data,
                 best_idx = best_epoch,
                 verbose = self.verbose

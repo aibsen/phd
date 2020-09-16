@@ -23,7 +23,7 @@ class Experiment(nn.Module):
         train_data=None, 
         val_data=None,
         test_data=None,
-        balance_training_set=False,
+        sampler=None,
         weight_decay_coefficient=0, 
         use_gpu=True, 
         continue_from_epoch=-1, 
@@ -54,14 +54,14 @@ class Experiment(nn.Module):
 
 
         if train_data and val_data:
-            if balance_training_set:
-                weights, num_samples = self.calculate_balance_weights(train_data)
-                sampler = torch.utils.data.sampler.WeightedRandomSampler(weights, num_samples)                     
-                train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, sampler=sampler)     
+            if sampler is not None:
+                train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, sampler=sampler)
+                val_loader = torch.utils.data.DataLoader(val_data, batch_size=batch_size, sampler=sampler)
+
             else:
                 train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=True)
+                val_loader = torch.utils.data.DataLoader(val_data, batch_size=batch_size, shuffle=True)
 
-            val_loader = torch.utils.data.DataLoader(val_data, batch_size=batch_size, shuffle=True)
             self.train_data = train_loader
             self.val_data = val_loader
         else:
@@ -69,7 +69,10 @@ class Experiment(nn.Module):
             self.val_data = None
 
         if test_data:
-            test_loader = torch.utils.data.DataLoader(test_data,batch_size=batch_size,shuffle=True)
+            if sampler is not None:
+                test_loader = torch.utils.data.DataLoader(test_data,batch_size=batch_size,sampler=sampler)
+            else:
+                test_loader = torch.utils.data.DataLoader(test_data,batch_size=batch_size,shuffle=True)
             self.test_data = test_loader
 
         else:

@@ -47,3 +47,24 @@ class RightCrop(object):
             return X,Y,obid 
         else:
             print("crop size must be smaller than the length of lc")
+
+
+class RandomCropsZeroPad(object):
+  
+    def __init__(self, output_sizes, lc_length):
+        
+        self.output_sizes = output_sizes
+        self.lc_length = lc_length
+
+    def __call__(self, sample):
+        X,Y,obid=sample
+        probs = [1/len(self.output_sizes)]*len(self.output_sizes)
+        size = np.random.choice(self.output_sizes, p=probs)
+        left = np.random.randint(0, self.lc_length - size)
+        X=X[:,left:left+size]
+        #now zero pad if necessary
+        if size < self.lc_length:
+            zeros = self.lc_length-size
+            padding = torch.nn.ConstantPad1d((0,zeros),0)
+            X=padding(X)
+        return X,Y,obid
