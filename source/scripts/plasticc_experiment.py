@@ -95,7 +95,8 @@ grusa_params = {
 exp_params={
     "num_epochs" : num_epochs,
     "learning_rate" : lr,
-    "weight_decay_coefficient" : wdc,
+    "num_output_classes": 6,
+    "weight_decay_coefficient": wdc,
     "use_gpu" : use_gpu,
     "batch_size" : batch_size,
     "sampler" : None

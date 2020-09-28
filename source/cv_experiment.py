@@ -91,6 +91,7 @@ class CVExperiment(nn.Module):
                 use_gpu = self.exp_params["use_gpu"],
                 batch_size = self.exp_params["batch_size"],
                 sampler = self.exp_params["sampler"],
+                num_output_classes= self.exp_params["num_output_classes"],
                 train_data = train_dataset,
                 val_data = val_dataset,
                 test_data = self.test_data,
@@ -114,6 +115,7 @@ class CVExperiment(nn.Module):
                 use_gpu = self.exp_params["use_gpu"],
                 batch_size = self.exp_params["batch_size"],
                 sampler = self.exp_params["sampler"],
+                num_output_classes= self.exp_params["num_output_classes"],
                 test_data = self.test_data,
                 best_idx = best_epoch,
                 verbose = self.verbose
