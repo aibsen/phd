@@ -18,11 +18,13 @@ from recurrent_models import GRU1D
 from convolutional_models import FCNN1D, ResNet1D
 from seeded_experiment import SeededExperiment
 
+from torch.utils.data import RandomSampler
+
 results_dir = "../../results/"
 exp_name = "plasticc_exp"
 plasticc_dataset = "../../data/plasticc/plasticc_dataset.h5"
 lc_length = 128
-cache_size = 100000
+cache_size = 150000
 cached_dataset = CachedLCs(lc_length, plasticc_dataset, data_cache_size=cache_size)
 # print(len(cached_dataset))
 # 2974714
@@ -35,7 +37,7 @@ wdc = 1e-03
 n_seeds = 5
 
 
-# # sampler = CachedRandomSampler(cached_dataset, chunk_size=cache_size)
+# sampler = CachedRandomSampler(cached_dataset, chunk_size=cache_size)
 # # train_loader = torch.utils.data.DataLoader(cached_dataset, batch_size=batch_size, sampler=sampler)
 
 
@@ -45,9 +47,12 @@ n_seeds = 5
 # #training set size 1e-3, 1e-5, cached LCs still not needed 
 
 #split dataset into what we will use first
-train_data_set_length = 1250 #so if k=5, training set is size 1000
+train_data_set_length = 125000 #so if k=5, training set is size 1000
 test_data_set_length = 100000
-train_dataset, test_dataset = cached_dataset_random_split(cached_dataset,cache_size,[train_data_set_length,test_data_set_length])
+train_dataset, test_dataset = cached_dataset_random_split(cached_dataset,[train_data_set_length,test_data_set_length],cache_size)
+train_sampler = CachedRandomSampler(train_dataset,chunk_size=cache_size)
+test_sampler = CachedRandomSampler(train_dataset,chunk_size=cache_size)
+
 
 #crop training dataset into different lengths
 lengths = np.array([0.1, 0.25, 0.5, 1.0])*lc_length
@@ -99,13 +104,13 @@ exp_params={
     "weight_decay_coefficient": wdc,
     "use_gpu" : use_gpu,
     "batch_size" : batch_size,
-    "sampler" : None
+    "chunk_size": cache_size
 }
 
 
 
 # RNN
-exp_name = "exp_plastic_gru_1000"
+exp_name = "exp_plastic_gru_10+5"
 gru = GRU1D(gru_params)
 exp_params["network_model"] = gru
 experiment = SeededExperiment(
@@ -122,7 +127,7 @@ print("--- %s seconds ---" % (time.time() - start_time))
 
 
 #RNN-attention
-exp_name = "exp_plasticc_grusa_1000"
+exp_name = "exp_plasticc_grusa_10+5"
 grusa = GRU1D(grusa_params)
 exp_params["network_model"] = grusa
 experiment = SeededExperiment(
@@ -138,7 +143,7 @@ experiment.run_experiment()
 print("--- %s seconds ---" % (time.time() - start_time))
 
 #FCN
-exp_name = "exp_plasticc_fcn_1000"
+exp_name = "exp_plasticc_fcn_10+5"
 fcn = FCNN1D(fcn_params)
 exp_params["network_model"] = fcn
 experiment = SeededExperiment(
@@ -153,7 +158,7 @@ experiment.run_experiment()
 print("--- %s seconds ---" % (time.time() - start_time))
 
 #ResNet
-exp_name = "exp_plasticc_resnet_1000"
+exp_name = "exp_plasticc_resnet_10+5"
 resnet = ResNet1D(resnet_params)
 exp_params["network_model"] = resnet
 experiment = SeededExperiment(

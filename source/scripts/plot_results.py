@@ -101,8 +101,6 @@ def plot_train_val_f1s(filenames,n_epochs,rows,cols):
     plt.setp(ax, ylim=custom_ylim)
     plt.show()
 
-
-
 def plot_best_cms(results_dir = "../../results/",exp=2,part=1,count=3):
     
     exp_names = list(map(lambda x: x.format(exp,part),["exp{}_p{}_fcn", "exp{}_p{}_resnet", "exp{}_p{}_gru", "exp{}_p{}_grusa"]))
@@ -116,9 +114,11 @@ def plot_histograms(metric="f1",results_dir = "../../results/",exp=2,part=1,coun
     
     exp_names = list(map(lambda x: x.format(exp,part),["exp{}_p{}_fcn", "exp{}_p{}_resnet", "exp{}_p{}_gru", "exp{}_p{}_grusa"]))
     summary_filename = "test_results_new_summary{}.csv".format(count)
-    metrics = np.asarray(list(map(lambda x: SeededExperiment(results_dir+x).get_all_metrics(summary_filename=summary_filename), exp_names)))
-    metrics = metrics.reshape(metrics.shape[1], metrics.shape[0])
-    colors =["#877cb2","#e37b5f","#aa4773","#47a5aa"]
+    # summary_filename="validation_summary.csv"
+    metrics = np.asarray(list(map(lambda x: SeededExperiment(results_dir+x).get_all_metrics(metric=metric,summary_filename=summary_filename), exp_names)))
+    metrics = np.swapaxes(metrics, 0,1)
+    # colors =["#877cb2","#e37b5f","#aa4773","#47a5aa"]
+    colors= ["#c02878","#20c8b8","#e8a000","#104890"]
     names = ["FCN", "ResNet", "RNN", "RNN-SA"]
     n, bins, patches = plt.hist(metrics, 10, density=False,color=colors,alpha=0.7)
     for i in np.arange(len(exp_names)):
@@ -131,40 +131,53 @@ def plot_histograms(metric="f1",results_dir = "../../results/",exp=2,part=1,coun
         sigmastr = "%.3f" % sigma
         label = ', $\mu={},\ \sigma={}$'.format(mustr,sigmastr)
         plt.plot(x, stats.norm.pdf(x, mu, sigma)*scale, color=colors[i],label=names[i]+label, alpha=0.8)
-    plt.xlim(right=1)
-    plt.xlim(left=0)
-    plt.xticks([0.1,0.2,0.3,0.40,0.5,0.6,0.7,0.8,0.9,1])
+    # plt.xlim(right=1)
+    # plt.xlim(left=0)
+    # plt.xticks([0.1,0.2,0.3,0.40,0.5,0.6,0.7,0.8,0.9,1])
     plt.yticks(np.arange(0,30,5))
     plt.ylim(top=26)
     plt.legend()
     plt.show()
-
 
 def plot_cumulative(metric="f1",results_dir = "../../results/",exp=2,part=1,count=3):
 
     exp_names = list(map(lambda x: x.format(exp,part),["exp{}_p{}_fcn", "exp{}_p{}_resnet", "exp{}_p{}_gru", "exp{}_p{}_grusa"]))
     summary_filename = "test_results_new_summary{}.csv".format(count)
+    # summary_filename="validation_summary.csv"
     metrics = np.asarray(list(map(lambda x: SeededExperiment(results_dir+x).get_all_metrics(summary_filename=summary_filename), exp_names)))
-    metrics = metrics.reshape(metrics.shape[1], metrics.shape[0])
-    colors =["#877cb2","#e37b5f","#aa4773","#47a5aa"]
+    metrics = np.swapaxes(metrics, 0,1)
+    # colors =["#877cb2","#e37b5f","#aa4773","#47a5aa"]
+    colors= ["#c02878","#20c8b8","#e8a000","#104890"]
     names = ["FCN", "ResNet", "RNN", "RNN-SA"]
-    n, bins, patches = plt.hist(metrics, 10, density=False,color=colors,alpha=0.7,cumulative=-1, histtype='step')
-    for i in np.arange(len(exp_names)):
-        mu = np.mean(metrics[:,i])
-        sigma = np.std(metrics[:,i])
-        x = np.linspace(mu - 5*sigma, mu + 5*sigma, 100)
-        dx = bins[1] - bins[0]
-        scale = metrics.shape[0]*dx
-        mustr = "%.3f" % mu
-        sigmastr = "%.3f" % sigma
-        label = ', $\mu={},\ \sigma={}$'.format(mustr,sigmastr)
-        plt.plot(x, stats.norm.pdf(x, mu, sigma)*scale, color=colors[i],label=names[i]+label, alpha=0.8)
-    plt.xlim(right=1)
-    plt.xlim(left=0)
-    plt.xticks([0.1,0.2,0.3,0.40,0.5,0.6,0.7,0.8,0.9,1])
+    n, bins, patches = plt.hist(metrics, 10,color=colors,alpha=0.8,cumulative=1,label=names, histtype='step')
+    
+    # plt.xlim(right=1)
+    # plt.xlim(left=0)
+    # plt.xticks([0.1,0.2,0.3,0.40,0.5,0.6,0.7,0.8,0.9,1])
     plt.yticks(np.arange(0,30,5))
     plt.ylim(top=26)
-    plt.legend()
+    plt.legend(loc=2)
     plt.show()
 
-plot_cumulative()
+
+models = ["fcn", "resnet","gru","grusa"]
+models_str = ["FCN", "ResNet","RNN","RNN-SA"]
+data_volume = ["1000","5000","10+4","5x10+4","10+5"]
+data_volume_str = ["10^3","5x10^3","10^4","5x10^4","10^5"]
+colors= ["#c02878","#20c8b8","#e8a000","#104890"]
+exp_dir = "../../results/"
+# fig,ax=plt.figure()
+for m,c in zip(models,colors):
+    data_points=[]
+    for d in data_volume:
+        exp_name ="exp_plasticc_{}_{}".format(m,d)
+        print(exp_name)
+        results_summary = pd.read_csv(exp_dir+exp_name+"/result_outputs/test_summary.csv")
+        exp_mean_f1=results_summary["mean_f1"].values[0]
+        data_points.append(exp_mean_f1)
+        print(exp_mean_f1)
+    plt.plot(data_volume_str, data_points,label=m,color=c)
+    plt.legend()
+plt.xlabel("Number of light curves used for training")
+plt.ylabel("F1-score")
+plt.show()
