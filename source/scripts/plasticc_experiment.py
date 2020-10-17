@@ -24,13 +24,13 @@ results_dir = "../../results/"
 exp_name = "plasticc_exp"
 plasticc_dataset = "../../data/plasticc/plasticc_dataset.h5"
 lc_length = 128
-cache_size = 150000
+cache_size = 100000
 cached_dataset = CachedLCs(lc_length, plasticc_dataset, data_cache_size=cache_size)
 # print(len(cached_dataset))
 # 2974714
 
 batch_size = 64
-num_epochs = 30
+num_epochs = 1
 use_gpu = True
 lr = 1e-03
 wdc = 1e-03
@@ -47,11 +47,9 @@ n_seeds = 5
 # #training set size 1e-3, 1e-5, cached LCs still not needed 
 
 #split dataset into what we will use first
-train_data_set_length = 125000 #so if k=5, training set is size 1000
+train_data_set_length = 625000 #so if k=5, training set is size 1000
 test_data_set_length = 100000
 train_dataset, test_dataset = cached_dataset_random_split(cached_dataset,[train_data_set_length,test_data_set_length],cache_size)
-train_sampler = CachedRandomSampler(train_dataset,chunk_size=cache_size)
-test_sampler = CachedRandomSampler(train_dataset,chunk_size=cache_size)
 
 
 #crop training dataset into different lengths
@@ -110,7 +108,7 @@ exp_params={
 
 
 # RNN
-exp_name = "exp_plastic_gru_10+5"
+exp_name = "exp_plastic_gru_5x10+5"
 gru = GRU1D(gru_params)
 exp_params["network_model"] = gru
 experiment = SeededExperiment(
@@ -127,7 +125,7 @@ print("--- %s seconds ---" % (time.time() - start_time))
 
 
 #RNN-attention
-exp_name = "exp_plasticc_grusa_10+5"
+exp_name = "exp_plasticc_grusa_5x10+5"
 grusa = GRU1D(grusa_params)
 exp_params["network_model"] = grusa
 experiment = SeededExperiment(
@@ -143,7 +141,7 @@ experiment.run_experiment()
 print("--- %s seconds ---" % (time.time() - start_time))
 
 #FCN
-exp_name = "exp_plasticc_fcn_10+5"
+exp_name = "exp_plasticc_fcn_5x10+5"
 fcn = FCNN1D(fcn_params)
 exp_params["network_model"] = fcn
 experiment = SeededExperiment(
@@ -158,7 +156,7 @@ experiment.run_experiment()
 print("--- %s seconds ---" % (time.time() - start_time))
 
 #ResNet
-exp_name = "exp_plasticc_resnet_10+5"
+exp_name = "exp_plasticc_resnet_5x10+5"
 resnet = ResNet1D(resnet_params)
 exp_params["network_model"] = resnet
 experiment = SeededExperiment(

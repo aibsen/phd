@@ -9,8 +9,10 @@ import tqdm
 import os
 import numpy as np
 import time
-from sklearn.model_selection import KFold
+# from sklearn.model_selection import KFold
 from datasets import LCs
+from data_samplers import CachedRandomSampler
+from dataset_utils import cached_crossvalidator_split
 from experiment import Experiment
 from utils import load_statistics,save_statistics,find_best_epoch
 import pandas as pd
@@ -38,9 +40,14 @@ class CVExperiment(nn.Module):
         self.train_data = train_data
         if train_data:
             self.train_length = len(train_data)
-            idxs = np.arange(self.train_length)
-            kf = KFold(n_splits=k)
-            self.kfs = kf.split(idxs)
+            self.kf_length = int(self.train_length/self.k)
+            kf_lengths = [self.kf_length]*self.k
+            # idxs = np.arange(self.train_length)
+            # kf = KFold(n_splits=k)
+            # self.kfs = kf.split(idxs)
+            self.chunksize=self.exp_params['chunk_size'] if 'chunk_size' in self.exp_params else 100000
+            self.kfs = cached_crossvalidator_split(train_data,kf_lengths,self.chunksize)
+            # print(self.kfs)
 
         self.test_data = test_data
         if test_data:
@@ -77,10 +84,16 @@ class CVExperiment(nn.Module):
             self.save_fold_statistics([test_summary])
 
     def run_train_phase(self, test_results="test_results.csv", test_summary="test_summary.csv"):
-        for k,(tr,val) in enumerate(self.kfs):
 
+        for k,(tr,val) in enumerate(self.kfs):
             train_dataset = torch.utils.data.Subset(self.train_data, tr)
+            # print(len(train_dataset))
             val_dataset = torch.utils.data.Subset(self.train_data, val)
+            # print(len(val_dataset))
+            train_sampler = CachedRandomSampler(train_dataset,chunk_size=self.chunksize)
+            val_sampler = CachedRandomSampler(val_dataset,chunk_size=self.chunksize)
+            if self.test_data:
+                test_sampler = CachedRandomSampler(self.test_data,chunk_size=self.chunksize)
          
             experiment = Experiment(
                 network_model = self.exp_params["network_model"],
@@ -90,7 +103,9 @@ class CVExperiment(nn.Module):
                 weight_decay_coefficient = self.exp_params["weight_decay_coefficient"],
                 use_gpu = self.exp_params["use_gpu"],
                 batch_size = self.exp_params["batch_size"],
-                sampler = self.exp_params["sampler"],
+                train_sampler = train_sampler,
+                val_sampler = val_sampler,
+                test_sampler = test_sampler,
                 num_output_classes= self.exp_params["num_output_classes"],
                 train_data = train_dataset,
                 val_data = val_dataset,
@@ -100,6 +115,13 @@ class CVExperiment(nn.Module):
 
             start_time = time.time()
             experiment.run_experiment(test_results=test_results,test_summary=test_summary)
+            stats = torch.cuda.memory_allocated()
+            print("STATS AT THE END OF A FOLD ··················")
+            print(stats)
+            torch.cuda.empty_cache()
+            print("after emptying mem ··················")
+            print(stats)
+
             if self.verbose:
                 print("--- %s seconds ---" % (time.time() - start_time))
 
@@ -114,7 +136,7 @@ class CVExperiment(nn.Module):
                 experiment_name = exp_name,
                 use_gpu = self.exp_params["use_gpu"],
                 batch_size = self.exp_params["batch_size"],
-                sampler = self.exp_params["sampler"],
+                test_sampler = CachedRandomSampler(self.test_data,chunk_size=self.chunksize),
                 num_output_classes= self.exp_params["num_output_classes"],
                 test_data = self.test_data,
                 best_idx = best_epoch,

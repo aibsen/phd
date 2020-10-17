@@ -14,26 +14,33 @@ class CachedRandomSampler(Sampler):
     """
 
     def __init__(self, data_source, chunk_size=100000):
+        print("DATASEt length in sampler"+str(len(data_source)))
         self.dataset_length = len(data_source)
         self.chunk_size = chunk_size 
         self.n_chunks = np.ceil(self.dataset_length/self.chunk_size)
-        print(self.dataset_length)
-        print(self.n_chunks)
+        # print(self.dataset_length)
+        # print(self.n_chunks)
     def __iter__(self):
         chunk_order = torch.randperm(int(self.n_chunks))
         it = torch.tensor([],dtype = torch.long)
         for i,chunk in enumerate(chunk_order):
             shift = chunk*self.chunk_size
+            #need to fix this bug but patching it up for now
             if chunk == self.n_chunks-1:
                 limit = self.dataset_length-(self.n_chunks-1)*self.chunk_size
                 index_order = torch.randperm(int(limit))
-                print("bi")
             else:
                 index_order = torch.randperm(int(self.chunk_size))
-                print("be")
             indexes = index_order+shift
-            it = torch.cat((it,indexes),0)
-            print("it")
+            print(indexes)
+            print(self.dataset_length)
+            it = torch.cat((it,indexes))
+
+            # if chunk != self.n_chunks-1:
+            #     index_order = torch.randperm(int(self.chunk_size))
+            #     indexes = index_order+shift
+            #     it = torch.cat((it,indexes))
+            #     #for now we are ignoring the last chunk 
         return iter(it.tolist())
 
     def __len__(self):

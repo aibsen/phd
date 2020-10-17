@@ -4,8 +4,10 @@ from torch.utils.data import Dataset
 import h5py
 from torch.utils.data import Subset
 
-def cached_dataset_random_split(dataset,chunksize,dataset_lengths):
-    print(dataset_lengths)
+
+
+def cached_dataset_indices_split(dataset, dataset_lengths, chunksize=100000):
+    # print(dataset_lengths)
     if sum(dataset_lengths)>len(dataset):
         raise ValueError("Sum of input lengths is greater than the length of the dataset")
 
@@ -17,7 +19,7 @@ def cached_dataset_random_split(dataset,chunksize,dataset_lengths):
     subsets_indices = []
     
     for length in dataset_lengths:
-        print(length)
+        # print(length)
         min_n_chunks = np.ceil(length/chunksize) #min n of chunks needed
         min_i_chunks = np.random.choice(np.arange(len(chunk_pool)),size=int(min_n_chunks),replace=False)
         min_chunks = [chunk_pool[i] for i in min_i_chunks] #list of tuples (index, size) randomly chosen chunks to be used
@@ -39,46 +41,22 @@ def cached_dataset_random_split(dataset,chunksize,dataset_lengths):
                     rem_length = 0 
                 indices = np.concatenate((indices,idxs),0)
         subsets_indices.append(indices)
-    print(subsets_indices)
+    # print("SUBSET INDICES")
+    # print(subsets_indices)
+    return subsets_indices
+
+def cached_dataset_random_split(dataset,dataset_lengths,chunksize=100000):
+    subsets_indices=cached_dataset_indices_split(dataset,dataset_lengths,chunksize)
     return [Subset(dataset, idx) for idx in subsets_indices]
 
 
-
-
-# [docs]def random_split(dataset, lengths, generator=default_generator):
-#     r"""
-#     Randomly split a dataset into non-overlapping new datasets of given lengths.
-#     Optionally fix the generator for reproducible results, e.g.:
-
-#     >>> random_split(range(10), [3, 7], generator=torch.Generator().manual_seed(42))
-
-#     Arguments:
-#         dataset (Dataset): Dataset to be split
-#         lengths (sequence): lengths of splits to be produced
-#         generator (Generator): Generator used for the random permutation.
-#     """
-#     if sum(lengths) != len(dataset):
-#         raise ValueError("Sum of input lengths does not equal the length of the input dataset!")
-
-#     indices = randperm(sum(lengths), generator=generator).tolist()
-#     return [Subset(dataset, indices[offset - length : offset]) for offset, length in zip(_accumulate(lengths), lengths)]
-
-
-
-#     [docs]class Subset(Dataset):
-#     r"""
-#     Subset of a dataset at specified indices.
-
-#     Arguments:
-#         dataset (Dataset): The whole Dataset
-#         indices (sequence): Indices in the whole set selected for subset
-#     """
-#     def __init__(self, dataset, indices):
-#         self.dataset = dataset
-#         self.indices = indices
-
-#     def __getitem__(self, idx):
-#         return self.dataset[self.indices[idx]]
-
-#     def __len__(self):
-#         return len(self.indices)
+def cached_crossvalidator_split(dataset,dataset_lengths,chunksize=100000):
+    subsets_indices=cached_dataset_indices_split(dataset,dataset_lengths)
+    l=len(dataset)
+    for val_index in subsets_indices:
+        indices = np.arange(l)
+        # print(val_index)
+        validation_index=val_index.astype(int)
+        train_index = np.delete(indices,val_index)
+        # print(train_index)
+        yield train_index, validation_index

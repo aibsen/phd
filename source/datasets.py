@@ -148,6 +148,7 @@ class CachedLCs(Dataset):
         data_cache_size : size of the chunks that will be read (in terms of number of objects)
         transform : transformation to apply to samples
     """
+
     def __init__(self,lc_length, dataset_file, data_cache_size=100000, transform=None):
 
         self.lc_length = lc_length
@@ -169,6 +170,7 @@ class CachedLCs(Dataset):
                 Y = f["Y"]
                 ids = f["ids"]
                 self.dataset_length = len(ids)
+                print("DATASETLENGTH:"+str(self.dataset_length))
                 self.n_chunks = np.ceil(self.dataset_length/self.data_cache_size)
 
         except Exception as e:
@@ -178,26 +180,45 @@ class CachedLCs(Dataset):
         return self.dataset_length
 
     def __getitem__(self, idx):
+        print("idx")
+        print(idx)
+        stats = torch.cuda.memory_allocated()
+        torch.cuda.empty_cache()
+        # print("after emptying mem ··················")
+        # print(stats)
         if idx <= self.high_idx and idx >=self.low_idx: #if index asked for is in cache, return it
+            # print("low : "+str(self.low_idx)+" < "+str(idx)+" high: "+str(self.high_idx))
             idx = int(idx-self.low_idx)
+            # print("idx in chunk: "+str(idx))
             sample = self.X[idx], self.Y[idx], self.ids[idx]
-            if self.transform:
-                return self.transform(sample)
-            else:
-                return sample
                 
         else: # if index need is not in cache, need to load new chunk into memmory and call function again
             with h5py.File(self.dataset_file,'r') as f:
                 current_chunk = np.floor(idx/self.data_cache_size)
                 self.low_idx = int(current_chunk*self.data_cache_size)
                 self.high_idx = int((current_chunk+1)*self.data_cache_size) if current_chunk != self.n_chunks else int(self.dataset_length-1)
-                X = f["X"][self.low_idx:self.high_idx,:,0:self.lc_length]
-                Y = f["Y"][self.low_idx:self.high_idx]
-                ids = f["ids"][self.low_idx:self.high_idx]
-                self.X = torch.tensor(X, device = self.device, dtype=torch.float)
-                self.Y = torch.tensor(Y, device = self.device, dtype=torch.long)
-                self.ids = torch.tensor(ids, device = self.device, dtype=torch.int)
-                return self.__getitem__(idx)
+                stats = torch.cuda.memory_allocated()
+                print("low : "+str(self.low_idx)+" < "+str(idx)+" high: "+str(self.high_idx))
+                print("STATS before LOADING DATA ··················")
+                print(stats)
+                del self.X
+                del self.Y
+                del self.ids
+                self.X = torch.tensor(f["X"][self.low_idx:self.high_idx,:,0:self.lc_length], device = self.device, dtype=torch.float)
+                self.Y = torch.tensor(f["Y"][self.low_idx:self.high_idx], device = self.device, dtype=torch.long)
+                self.ids = torch.tensor(f["ids"][self.low_idx:self.high_idx], device = self.device, dtype=torch.int)
+                # print("REC")
+                stats = torch.cuda.memory_allocated()
+                print("STATS after LOADING DATA ··················")
+                print(stats)
+
+                idx = int(idx-self.low_idx)
+                sample = self.X[idx], self.Y[idx], self.ids[idx]
+
+        if self.transform:
+            return self.transform(sample)
+        else:
+            return sample
 
 
 

@@ -9,6 +9,7 @@ import tqdm
 import os
 import numpy as np
 import time
+from torch.utils.data import SequentialSampler
 from sklearn.metrics import precision_score, recall_score, precision_recall_fscore_support
 from utils import save_to_stats_pkl_file, load_from_stats_pkl_file, \
     save_statistics, load_statistics, save_classification_results
@@ -23,7 +24,9 @@ class Experiment(nn.Module):
         train_data=None, 
         val_data=None,
         test_data=None,
-        sampler=None,
+        train_sampler=None,
+        val_sampler=None,
+        test_sampler = None,
         weight_decay_coefficient=0, 
         use_gpu=True, 
         continue_from_epoch=-1, 
@@ -53,28 +56,37 @@ class Experiment(nn.Module):
         self.num_output_classes = num_output_classes
 
 
-        if train_data and val_data:
-            if sampler is not None:
-                train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, sampler=sampler)
-                val_loader = torch.utils.data.DataLoader(val_data, batch_size=batch_size, sampler=sampler)
-
+        if train_data:
+            if train_sampler is not None:
+                print("there's a sampler")
+                print(len(train_data))
+                print(train_sampler)
+                # sampler = SequentialSampler(train_data)
+                # train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, sampler=sampler)
+                train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, sampler=train_sampler)
             else:
                 train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=True)
-                val_loader = torch.utils.data.DataLoader(val_data, batch_size=batch_size, shuffle=True)
-
             self.train_data = train_loader
-            self.val_data = val_loader
+
         else:
             self.train_data = None
             self.val_data = None
 
+        if val_data:
+            if val_sampler is not None:
+                val_loader = torch.utils.data.DataLoader(val_data,batch_size=batch_size,sampler=val_sampler)
+            else:
+                 val_loader = torch.utils.data.DataLoader(val_data, batch_size=batch_size, shuffle=True)
+            self.val_data = val_loader
+        else:
+            self.val_data = None
+
         if test_data:
-            if sampler is not None:
-                test_loader = torch.utils.data.DataLoader(test_data,batch_size=batch_size,sampler=sampler)
+            if test_sampler is not None:
+                test_loader = torch.utils.data.DataLoader(test_data,batch_size=batch_size,sampler=test_sampler)
             else:
                 test_loader = torch.utils.data.DataLoader(test_data,batch_size=batch_size,shuffle=True)
             self.test_data = test_loader
-
         else:
             self.test_data = None
 
@@ -220,6 +232,7 @@ class Experiment(nn.Module):
             #     pbar_train = tqdm.tqdm(total=len(self.train_data))
             #     pbar_val = tqdm.tqdm(total=len(self.val_data))
             with tqdm.tqdm(total=len(self.train_data)) as pbar_train:
+                # print("size of train data:"+str(len(self.train_data)))
                 for idx, (x, y,ids) in enumerate(self.train_data):
                     loss, accuracy,f1, p, r = self.run_train_iter(x=x, y=y)
                     current_epoch_metrics["train_loss"].append(loss)
