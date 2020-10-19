@@ -163,16 +163,16 @@ class CachedLCs(Dataset):
         self.n_chunks = 0
         self.low_idx = 0
         self.high_idx = -1
-        self.transform = transform
+
         try:
             with h5py.File(self.dataset_file,'r') as f:
                 X = f["X"]
                 Y = f["Y"]
                 ids = f["ids"]
                 self.dataset_length = len(ids)
-                print("DATASETLENGTH:"+str(self.dataset_length))
-                self.n_chunks = np.ceil(self.dataset_length/self.data_cache_size)
-
+                # print("DATASETLENGTH:"+str(self.dataset_length))
+                true_size = self.dataset_length/self.data_cache_size
+                self.n_chunks = np.ceil(true_size)
         except Exception as e:
             print(e)
 
@@ -180,8 +180,6 @@ class CachedLCs(Dataset):
         return self.dataset_length
 
     def __getitem__(self, idx):
-        print("idx")
-        print(idx)
         stats = torch.cuda.memory_allocated()
         torch.cuda.empty_cache()
         # print("after emptying mem ··················")
@@ -219,6 +217,4 @@ class CachedLCs(Dataset):
             return self.transform(sample)
         else:
             return sample
-
-
 

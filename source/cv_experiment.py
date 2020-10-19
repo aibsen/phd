@@ -40,8 +40,12 @@ class CVExperiment(nn.Module):
         self.train_data = train_data
         if train_data:
             self.train_length = len(train_data)
+            print("TRAIN LENGTH")
+            print(len(train_data))
+            print("KF LENGTH")
             self.kf_length = int(self.train_length/self.k)
             kf_lengths = [self.kf_length]*self.k
+            print(kf_lengths)
             # idxs = np.arange(self.train_length)
             # kf = KFold(n_splits=k)
             # self.kfs = kf.split(idxs)
