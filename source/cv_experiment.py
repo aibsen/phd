@@ -10,7 +10,7 @@ import os
 import numpy as np
 import time
 # from sklearn.model_selection import KFold
-from datasets import LCs
+from datasets import LCs, CachedLCs
 from data_samplers import CachedRandomSampler
 from dataset_utils import cached_crossvalidator_split
 from experiment import Experiment
@@ -86,12 +86,19 @@ class CVExperiment(nn.Module):
     def run_train_phase(self, test_results="test_results.csv", test_summary="test_summary.csv"):
 
         for k,(tr,val) in enumerate(self.kfs):
-            train_dataset = torch.utils.data.Subset(self.train_data, tr)
+            train_indices = self.train_data.indices[tr]
+            val_indices = self.train_data.indices[val]
+
+            train_dataset = CachedLCs(self.train_data.lc_length, self.train_data.dataset_file,self.chunksize,len(train_indices),train_indices,self.train_data.transform)
+            val_dataset = CachedLCs(self.train_data.lc_length, self.train_data.dataset_file,self.chunksize,len(val_indices),val_indices,self.train_data.transform)
+    
+            # train_dataset = torch.utils.data.Subset(self.train_data, tr)
             # print(len(train_dataset))
-            val_dataset = torch.utils.data.Subset(self.train_data, val)
+            # val_dataset = torch.utils.data.Subset(self.train_data, val)
             # print(len(val_dataset))
             train_sampler = CachedRandomSampler(train_dataset,chunk_size=self.chunksize)
             val_sampler = CachedRandomSampler(val_dataset,chunk_size=self.chunksize)
+
             if self.test_data:
                 test_sampler = CachedRandomSampler(self.test_data,chunk_size=self.chunksize)
          

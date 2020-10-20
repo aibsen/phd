@@ -135,7 +135,7 @@ class InefficientCachedLCs(Dataset):
         self.data_cache[str(idx)] = sample
 
 
-class CachedLCs(Dataset):
+class CachedLCs2(Dataset):
 
 
     """Loads chunks of data into memory minimizing the number of disk acceses.
@@ -180,8 +180,8 @@ class CachedLCs(Dataset):
         return self.dataset_length
 
     def __getitem__(self, idx):
-        print("idx")
-        print(idx)
+        # print("idx")
+        # print(idx)
         stats = torch.cuda.memory_allocated()
         torch.cuda.empty_cache()
         # print("after emptying mem ··················")
@@ -222,3 +222,84 @@ class CachedLCs(Dataset):
 
 
 
+class CachedLCs(Dataset):
+
+    def __init__(self,lc_length, dataset_file, chunk_size=100000, dataset_length=None, indices=None, transform=None):
+
+        self.lc_length = lc_length
+        self.device = torch.device('cuda')
+
+        self.chunk_size = chunk_size
+        self.dataset_file = dataset_file
+
+        self.X = None
+        self.Y = None
+        self.ids = None
+
+        self.transform = transform
+        self.dataset_length = dataset_length
+        self.true_dataset_length = None
+        self.indices = indices
+
+        self.low_idx = 0
+        self.high_idx = -1
+
+        try:
+            with h5py.File(self.dataset_file,'r') as f:
+                X = f["X"]
+                Y = f["Y"]
+                ids = f["ids"]
+                self.true_dataset_length = len(ids)
+                if self.dataset_length is None:
+                    self.dataset_length = len(ids)
+                if self.indices is None:
+                    self.dataset_indices = np.arange(0,self.dataset_length)
+
+        except Exception as e:
+            print(e)
+
+        # print(self.indices)
+
+    def __len__(self):
+        return self.dataset_length
+
+    def __getitem__(self, idx):
+        # print(idx)
+        if idx <= self.high_idx and idx >=self.low_idx: #if index asked for is in cache, return it
+            idx = int(idx-self.low_idx)
+            sample = self.X[idx], self.Y[idx], self.ids[idx]
+        else: #if index asked for is not in cache, load it
+            with h5py.File(self.dataset_file,'r') as f:
+                current_chunk = np.floor(idx/self.chunk_size)
+                self.low_idx = int(current_chunk*self.chunk_size)
+                high_idx = int((current_chunk+1)*self.chunk_size)
+                self.high_idx =int((current_chunk+1)*self.chunk_size) if high_idx<self.true_dataset_length else int(self.true_dataset_length-1)
+                # stats = torch.cuda.memory_allocated()
+                # print("low : "+str(self.low_idx)+" < "+str(idx)+" high: "+str(self.high_idx))
+                # print("STATS before LOADING DATA ··················")
+                # print(stats)
+                del self.X
+                del self.Y
+                del self.ids
+                torch.cuda.empty_cache()
+        
+                self.X = torch.tensor(f["X"][self.low_idx:self.high_idx,:,0:self.lc_length], device = self.device, dtype=torch.float)
+                self.Y = torch.tensor(f["Y"][self.low_idx:self.high_idx], device = self.device, dtype=torch.long)
+                self.ids = torch.tensor(f["ids"][self.low_idx:self.high_idx], device = self.device, dtype=torch.int)
+                # print(self.X.size())
+                # stats = torch.cuda.memory_allocated()
+                # print("STATS after LOADING DATA ··················")
+                # print(stats)
+                idx = int(idx-self.low_idx)
+                # print(idx)
+                # print(self.X[idx].size())
+                # print(self.Y[idx])
+                sample = self.X[idx], self.Y[idx], self.ids[idx]
+
+        if self.transform:
+            # print("hay transform")
+            # print(self.transform)
+            # print(sample)
+            return self.transform(sample)
+        else:
+            return sample

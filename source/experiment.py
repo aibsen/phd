@@ -58,9 +58,9 @@ class Experiment(nn.Module):
 
         if train_data:
             if train_sampler is not None:
-                print("there's a sampler")
-                print(len(train_data))
-                print(train_sampler)
+                # print("there's a sampler")
+                # print(len(train_data))
+                # print(train_sampler)
                 # sampler = SequentialSampler(train_data)
                 # train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, sampler=sampler)
                 train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, sampler=train_sampler)

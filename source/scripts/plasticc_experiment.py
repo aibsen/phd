@@ -24,17 +24,17 @@ results_dir = "../../results/"
 exp_name = "plasticc_exp"
 plasticc_dataset = "../../data/plasticc/plasticc_dataset.h5"
 lc_length = 128
-cache_size = 100000
-cached_dataset = CachedLCs(lc_length, plasticc_dataset, data_cache_size=cache_size)
+cache_size = 200000
+cached_dataset = CachedLCs(lc_length, plasticc_dataset, chunk_size=cache_size)
 # print(len(cached_dataset))
 # 2974714
 
 batch_size = 64
-num_epochs = 1
+num_epochs = 30
 use_gpu = True
 lr = 1e-03
 wdc = 1e-03
-n_seeds = 5
+n_seeds = 1
 
 
 # sampler = CachedRandomSampler(cached_dataset, chunk_size=cache_size)
@@ -55,6 +55,7 @@ train_dataset, test_dataset = cached_dataset_random_split(cached_dataset,[train_
 #crop training dataset into different lengths
 lengths = np.array([0.1, 0.25, 0.5, 1.0])*lc_length
 lengths = [int(l) for l in lengths]
+# lengths = torch.tensor(lengths).cuda()
 transform = RandomCropsZeroPad(lengths, lc_length)
 train_dataset.transform = transform
 
