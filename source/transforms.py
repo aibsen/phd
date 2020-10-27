@@ -49,6 +49,7 @@ class RightCrop(object):
             print("crop size must be smaller than the length of lc")
 
 
+
 class RandomCropsZeroPad(object):
   
     def __init__(self, output_sizes, lc_length):
@@ -58,9 +59,9 @@ class RandomCropsZeroPad(object):
 
     def __call__(self, sample):
         X,Y,obid=sample
-        probs = [1/len(self.output_sizes)]*len(self.output_sizes)
-        size = np.random.choice(self.output_sizes, p=probs)
-        left = np.random.randint(0, self.lc_length - size)
+        size_idx = torch.randint(0,len(self.output_sizes),(1,)) #fix this so it works with batches
+        size = self.output_sizes[size_idx]
+        left = 0 if self.lc_length==size else torch.randint(0,(self.lc_length - size),(1,))
         X=X[:,left:left+size]
         #now zero pad if necessary
         if size < self.lc_length:

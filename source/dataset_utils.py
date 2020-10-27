@@ -3,6 +3,7 @@ import numpy as np
 from torch.utils.data import Dataset
 import h5py
 from torch.utils.data import Subset
+from datasets import CachedLCs
 
 
 
@@ -46,20 +47,32 @@ def cached_dataset_indices_split(dataset, dataset_lengths, max_chunksize=100000)
     return subsets_indices
 
 
+def cached_dataset_indices_sequential_split(dataset, dataset_lengths, max_chunksize=100000):
+    # print(dataset_lengths)
+    if sum(dataset_lengths)>len(dataset):
+        raise ValueError("Sum of input lengths is greater than the length of the dataset")
 
-def cached_dataset_random_split(dataset,dataset_lengths,max_chunksize=100000):
-    subsets_indices=cached_dataset_indices_split(dataset,dataset_lengths,max_chunksize)
-    print(subsets_indices)
-    # for i in subsets_indices:
-    #     print(len(subsets_indices))
-    return [Subset(dataset, idx) for idx in subsets_indices]
+    indices = np.arange(len(dataset))
+    subsets_indices = []
+    idx = 0
+    for length in dataset_lengths:
+        subset_idx = indices[idx:idx+length]
+        # print(subset_idx)
+        idx = idx + length
+        subsets_indices.append(subset_idx)
+    return subsets_indices
 
 
-def cached_crossvalidator_split(dataset,dataset_lengths,max_chunksize=100000):
-    subsets_indices=cached_dataset_indices_split(dataset,dataset_lengths)
+def cached_dataset_random_split(dataset,dataset_lengths,chunksize=100000):
+    subsets_indices=cached_dataset_indices_split(dataset,dataset_lengths,chunksize)
+    return [CachedLCs(dataset.lc_length, dataset.dataset_file,chunksize,len(idx),idx,dataset.transform) for idx in subsets_indices]
+
+
+def cached_crossvalidator_split(dataset,dataset_lengths,chunksize=100000):
+    subsets_indices=cached_dataset_indices_sequential_split(dataset,dataset_lengths)
     l=len(dataset)
     for val_index in subsets_indices:
-        indices = np.arange(l)
+        indices = np.arange(l).astype(int)
         # print(val_index)
         validation_index=val_index.astype(int)
         train_index = np.delete(indices,val_index)
