@@ -64,7 +64,7 @@ def cached_dataset_indices_sequential_split(dataset, dataset_lengths, max_chunks
 
 
 def cached_dataset_random_split(dataset,dataset_lengths,chunksize=100000):
-    subsets_indices=cached_dataset_indices_split(dataset,dataset_lengths,chunksize)
+    subsets_indices=cached_dataset_indices_split(dataset,dataset_lengths,max_chunksize=chunksize)
     return [CachedLCs(dataset.lc_length, dataset.dataset_file,chunksize,len(idx),idx,dataset.transform) for idx in subsets_indices]
 
 

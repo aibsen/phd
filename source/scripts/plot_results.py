@@ -162,8 +162,8 @@ def plot_cumulative(metric="f1",results_dir = "../../results/",exp=2,part=1,coun
 
 models = ["fcn", "resnet","gru","grusa"]
 models_str = ["FCN", "ResNet","RNN","RNN-SA"]
-data_volume = ["1000","5000","10+4","5x10+4","10+5"]
-data_volume_str = ["10^3","5x10^3","10^4","5x10^4","10^5"]
+data_volume = ["1000","5000","10+4","5x10+4","10+5","5x10+5"]
+data_volume_str = ["10^3","5x10^3","10^4","5x10^4","10^5","5x10^5"]
 colors= ["#c02878","#20c8b8","#e8a000","#104890"]
 exp_dir = "../../results/"
 # fig,ax=plt.figure()

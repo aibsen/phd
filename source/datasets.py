@@ -156,6 +156,7 @@ class CachedLCs(Dataset):
 
         self.low_idx = 0
         self.high_idx = -1
+        self.loading_data=0
 
         try:
             with h5py.File(self.dataset_file,'r') as f:
@@ -182,8 +183,12 @@ class CachedLCs(Dataset):
             idx = int(idx-self.low_idx)
             sample = self.X[idx], self.Y[idx], self.ids[idx]
         else: #if index asked for is not in cache, load it
+            print("loading data")
+            self.loading_data=self.loading_data+1
+            print(self.loading_data)
             with h5py.File(self.dataset_file,'r') as f:
-                current_chunk = np.floor(idx/self.chunk_size)
+                # current_chunk = np.floor(idx/self.chunk_size)
+                current_chunk = torch.floor(torch.tensor(idx/self.chunk_size,device=self.device))
                 self.low_idx = int(current_chunk*self.chunk_size)
                 high_idx = int((current_chunk+1)*self.chunk_size)
                 self.high_idx =int((current_chunk+1)*self.chunk_size) if high_idx<self.true_dataset_length else int(self.true_dataset_length-1)
