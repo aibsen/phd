@@ -38,6 +38,7 @@ class CVExperiment(nn.Module):
         self.k = k
         self.verbose = verbose
         self.train_data = train_data
+        self.chunksize=self.exp_params['chunk_size'] if 'chunk_size' in self.exp_params else 100000
         if train_data:
             self.train_length = len(train_data)
             print("TRAIN LENGTH")
@@ -49,7 +50,7 @@ class CVExperiment(nn.Module):
             # idxs = np.arange(self.train_length)
             # kf = KFold(n_splits=k)
             # self.kfs = kf.split(idxs)
-            self.chunksize=self.exp_params['chunk_size'] if 'chunk_size' in self.exp_params else 100000
+            
             self.kfs = cached_crossvalidator_split(train_data,kf_lengths,self.chunksize)
             # print(self.kfs)
 
@@ -141,13 +142,13 @@ class CVExperiment(nn.Module):
             exp_name = self.experiment_folds+"/fold_k"+str(k+1)
             print(exp_name)
             best_epoch = find_best_epoch(exp_name+"/result_outputs/summary.csv")
-
+            test_sampler = CachedRandomSampler(self.test_data,chunk_size=self.chunksize)
             experiment = Experiment(
                 network_model = self.exp_params["network_model"],
                 experiment_name = exp_name,
                 use_gpu = self.exp_params["use_gpu"],
                 batch_size = self.exp_params["batch_size"],
-                test_sampler = CachedRandomSampler(self.test_data,chunk_size=self.chunksize),
+                test_sampler = test_sampler,
                 num_output_classes= self.exp_params["num_output_classes"],
                 test_data = self.test_data,
                 best_idx = best_epoch,
