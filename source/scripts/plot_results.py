@@ -162,22 +162,34 @@ def plot_cumulative(metric="f1",results_dir = "../../results/",exp=2,part=1,coun
 
 models = ["fcn", "resnet","gru","grusa"]
 models_str = ["FCN", "ResNet","RNN","RNN-SA"]
-data_volume = ["1000","5000","10+4","5x10+4","10+5","5x10+5"]
+data_volume = ["10e+3","5x10e+3","10e+4","5x10e+4","10e+5","5x10e+5"]
+data_volume_double = [1000,5000,10000,50000,100000,500000]
 data_volume_str = ["10^3","5x10^3","10^4","5x10^4","10^5","5x10^5"]
 colors= ["#c02878","#20c8b8","#e8a000","#104890"]
 exp_dir = "../../results/"
 # fig,ax=plt.figure()
-for m,c in zip(models,colors):
+for i, (m,c) in enumerate(zip(models,colors)):
     data_points=[]
+    data_points_2=[]
     for d in data_volume:
         exp_name ="exp_plasticc_{}_{}".format(m,d)
         print(exp_name)
         results_summary = pd.read_csv(exp_dir+exp_name+"/result_outputs/test_summary.csv")
+        results_summary_2 = pd.read_csv(exp_dir+exp_name+"/result_outputs/test_summary_100percent.csv")
         exp_mean_f1=results_summary["mean_f1"].values[0]
+        exp_mean_f1_2=results_summary_2["mean_f1"].values[0]
         data_points.append(exp_mean_f1)
+        data_points_2.append(exp_mean_f1_2)
         print(exp_mean_f1)
-    plt.plot(data_volume_str, data_points,label=m,color=c)
+        print(exp_mean_f1_2)
+    plt.plot(data_volume_double, data_points,label=models_str[i],color=c,linestyle="dotted", marker="+")
+    plt.plot(data_volume_double, data_points_2,color=c,marker="+" )
     plt.legend()
+
+
+# plt.axvline(x=0.22058956)
+plt.ticklabel_format(axis="x", style="sci", scilimits=(0,0))
+plt.xticks(data_volume_double[2:], rotation = 45)
 plt.xlabel("Number of light curves used for training")
 plt.ylabel("F1-score")
 plt.show()

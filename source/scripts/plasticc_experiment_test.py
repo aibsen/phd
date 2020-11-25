@@ -38,10 +38,10 @@ torch.manual_seed(seed=seeds[0])
 # #testing using padded simulated light curves chopped. 
 # 10%-25,50,75 and 100 of lcs
 
-training_size = ["1000","5000","10+4","5x10+4","10+5","5x10+5"]
-percents = [0.1, 0.25,0.5,0.75]
-percents_str = ["10percent","25percent","50percent","75percent"]
-test_data_set_length = 300000
+training_size = ["10e+3","5x10e+3","10e+4","5x10e+4","10e+5","5x10e+5"]
+percents = [0.25,0.5,0.75]
+percents_str = ["25p","50p","75p"]
+test_data_set_length = 100000
 test_dataset = cached_dataset_random_split(cached_dataset,[test_data_set_length],cache_size)[0]
 input_shape = test_dataset[0][0].shape
 

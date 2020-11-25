@@ -41,8 +41,10 @@ torch.manual_seed(seed=seeds[0])
 # #training using complete simulated light curves and cropped light curves (1st bits) (50% + 25%+10%) (padded) 
 # #testing using padded simulated light curves chopped. 10% of lcs
 # #training set size 10e+3,5x10e+3,10e+4,5x10e+4,10e+5,5x10e+5, cached LCs still not needed 
-training_sizes_str= ["10e+3","5x10e+3","10e+4","5x10e+4","10e+5","5x10e+5"]
-training_sizes= [1250,6250,12500,62500,125000,625000]
+# "10e+3","5x10e+3","10e+4","5x10e+4","10e+5",
+training_sizes_str= ["5x10e+5"]
+# 1250,6250,12500,62500,125000,
+training_sizes= [625000]
 #split dataset into what we will use first
 test_data_set_length = 100000
 
