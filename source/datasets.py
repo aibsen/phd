@@ -5,7 +5,7 @@ import h5py
 import random
 
 class LCs(Dataset):
-    def __init__(self, lc_length, dataset_h5,n_channels=2,transform=None):
+    def __init__(self, lc_length, dataset_h5,n_channels=4,transform=None):
 
         self.lc_length = lc_length
         self.dataset_h5 = dataset_h5
