@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 import os, sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from sklearn.metrics import confusion_matrix
@@ -8,6 +9,24 @@ import scipy.stats as stats
 from seeded_experiment import SeededExperiment
 # from plot_utils import *
 
+def make_colormap_from_color(color):
+    """Return a LinearSegmentedColormap
+    seq: a sequence of floats and RGB-tuples. The floats should be increasing
+    and in the interval (0,1).
+    """
+
+    c = mcolors.ColorConverter().to_rgb
+    seq=[c('white'),c(color)]
+    seq = [(None,) * 3, 0.0] + list(seq) + [1.0, (None,) * 3]
+    cdict = {'red': [], 'green': [], 'blue': []}
+    for i, item in enumerate(seq):
+        if isinstance(item, float):
+            r1, g1, b1 = seq[i - 1]
+            r2, g2, b2 = seq[i + 1]
+            cdict['red'].append([item, r1, r2])
+            cdict['green'].append([item, g1, g2])
+            cdict['blue'].append([item, b1, b2])
+    return mcolors.LinearSegmentedColormap('CustomMap', cdict)
 
 def plot_train_val_acc_loss(exp_dir,n_epochs):
     results_summary = pd.read_csv(exp_dir+"/result_outputs/summary.csv")
@@ -25,7 +44,7 @@ def plot_train_val_acc_loss(exp_dir,n_epochs):
     ax[1].set(xlabel='epochs', ylabel='loss')
     plt.show()
 
-def plot_cms(files, rows, cols):
+def plot_cms(files, rows, cols,color=None):
     fig, axs = plt.subplots(rows, cols)
     tags_predictions = []
     
@@ -37,10 +56,15 @@ def plot_cms(files, rows, cols):
         pt = test_results.predicted_tags.values
         tags_predictions.append([tt,pt])
 
+
     for i,ax in enumerate(axs):
         tt = tags_predictions[i][0]
         pt = tags_predictions[i][1]
-        plot_cm(ax,tt,pt)
+        if color:
+            colormap = make_colormap_from_color(color)
+            plot_cm(ax,tt,pt,colormap=colormap)
+        else:
+            plot_cm(ax,tt,pt)
 
     titles = ["FCN", "ResNet", "RNN", "RNN with self-attention"]
     for i,ax in enumerate(fig.get_axes()):
@@ -49,13 +73,16 @@ def plot_cms(files, rows, cols):
 
     plt.show()
 
-def plot_cm(ax,true_targets, predictions, normalized=True):
+def plot_cm(ax,true_targets, predictions, normalized=False,colormap=None):
     # fig = plt.figure()
     # ax = fig.add_subplot(111)
     cm=confusion_matrix(true_targets,predictions)
     if normalized:
         cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
-    im = ax.imshow(cm, interpolation= 'nearest', cmap=plt.cm.Greens)
+    if colormap is not None:
+        im = ax.imshow(cm, interpolation= 'nearest', cmap=colormap)
+    else : 
+        im = ax.imshow(cm, interpolation= 'nearest', cmap=plt.cm.PuBu)
     names = ["snIa"," ","snIb/c"," ","snIIn"," ","snIIP"]
     # namesy = ["snIa"," ","snIb/c"," ","snIIn"," ","snIIP"]
     # namesx = ["snIa","snIb/c","snIIn","snIIP"]
@@ -78,21 +105,27 @@ def plot_cm(ax,true_targets, predictions, normalized=True):
 
 def plot_train_val_f1s(filenames,n_epochs,rows,cols):
     fig, ax = plt.subplots(rows, cols)
+    # color = ["#8bcc78", "#29aae1"
+    # color = ["#8bcc78", "#29aae1","#ff7f50","#7030a0"]
+    # color2 = ["#1d6309", "#0d4b92", "#a92e01","#301545"]
+    green="#8bcc78"
+    blue="#29aae1"
+    pink = "#e05a94"
     titles = ["FCN", "ResNet", "RNN", "RNN with self-attention"]
     for i,f in enumerate(filenames):
         results_summary = pd.read_csv(f)
         train_f1 = results_summary.train_f1.values
         val_f1 = results_summary.val_f1.values
         epochs = np.arange(n_epochs)
-        ax[i].plot(epochs,train_f1,color='#636389')
-        ax[i].plot(epochs,val_f1,color='#eb8c00')
+        ax[i].plot(epochs,train_f1,color=green, label="F1-score for the training set")
+        ax[i].plot(epochs,val_f1,color=blue, label="F1-score for the validation set")
         ax[i].set(xlabel='epochs')
         ax[i].label_outer()
         ax[i].title.set_text(titles[i])
         best_epoch = val_f1.argmax()
         best_f1_score = '%.3f' % val_f1.max()
         best_epoch_label="best F1-score:{} at epoch {}".format(best_f1_score,best_epoch)
-        ax[i].axvline(x=best_epoch,ls='--', label = best_epoch_label, color= "#e96342")
+        ax[i].axvline(x=best_epoch,ls="--", label = best_epoch_label, color=pink)
         ax[i].legend()
     # custom_xlim = (0, 100)
     fig.text(0.06, 0.5, 'F1-Score', ha='center', va='center', rotation='vertical')
@@ -160,24 +193,55 @@ def plot_cumulative(metric="f1",results_dir = "../../results/",exp=2,part=1,coun
     plt.show()
 
 
-models = ["fcn", "resnet","gru","grusa"]
-models_str = ["FCN", "ResNet","RNN","RNN-SA"]
-data_volume = ["1000","5000","10+4","5x10+4","10+5","5x10+5"]
-data_volume_str = ["10^3","5x10^3","10^4","5x10^4","10^5","5x10^5"]
-colors= ["#c02878","#20c8b8","#e8a000","#104890"]
-exp_dir = "../../results/"
-# fig,ax=plt.figure()
-for m,c in zip(models,colors):
-    data_points=[]
-    for d in data_volume:
-        exp_name ="exp_plasticc_{}_{}".format(m,d)
-        print(exp_name)
-        results_summary = pd.read_csv(exp_dir+exp_name+"/result_outputs/test_summary.csv")
-        exp_mean_f1=results_summary["mean_f1"].values[0]
-        data_points.append(exp_mean_f1)
-        print(exp_mean_f1)
-    plt.plot(data_volume_str, data_points,label=m,color=c)
+# models = ["fcn", "resnet","gru","grusa"]
+# models_str = ["FCN", "ResNet","RNN","RNN-SA"]
+# data_volume = ["1000","5000","10+4","5x10+4","10+5","5x10+5"]
+# data_volume_str = ["10^3","5x10^3","10^4","5x10^4","10^5","5x10^5"]
+# colors= ["#c02878","#20c8b8","#e8a000","#104890"]
+# exp_dir = "../../results/"
+# # fig,ax=plt.figure()
+# for m,c in zip(models,colors):
+#     data_points=[]
+#     for d in data_volume:
+#         exp_name ="exp_plasticc_{}_{}".format(m,d)
+#         print(exp_name)
+#         results_summary = pd.read_csv(exp_dir+exp_name+"/result_outputs/test_summary.csv")
+#         exp_mean_f1=results_summary["mean_f1"].values[0]
+#         data_points.append(exp_mean_f1)
+#         print(exp_mean_f1)
+#     plt.plot(data_volume_str, data_points,label=m,color=c)
+#     plt.legend()
+# plt.xlabel("Number of light curves used for training")
+# plt.ylabel("F1-score")
+# plt.show()
+
+# expdir = "../../results/simonly_p5_"
+# models = ["fcn", "resnet","gru","grusa"]
+# colors = ["#8bcc78", "#29aae1","#ff7f50","#7030a0"]
+# color = "#502472"
+# strong_orange = "#f44200"
+# filenames = [expdir+m+"/result_outputs/test_results.csv" for m in models]
+# # filenames = [expdir+m+"/result_outputs/summary.csv" for m in models]
+# print(filenames)
+# plot_cms(filenames, 1, 4,colors[3])
+# # plot_train_val_f1s(filenames,100,4,1)
+
+
+exp_dir = "../../results/4c_sa_tunning_grusa_r{}_d_{}"
+# a="../../results/4c_sa_tunning_grusa_r1_d_25/result_outputs/test_summary.csv"
+# b= pd.read_csv(a)
+rs=np.arange(1,6)
+ds=np.arange(25,125,25)
+for r in rs:
+    f1s = []
+    for d in ds:
+        filename = exp_dir.format(r,d)+"/result_outputs/test_summary.csv"
+        print(filename)
+        summary = pd.read_csv(filename)
+        f1=summary['f1']
+        f1s.append(f1)
+        l= "r = "+str(r)
+    plt.plot(np.arange(25,125,25),f1s,label=l)
     plt.legend()
-plt.xlabel("Number of light curves used for training")
-plt.ylabel("F1-score")
 plt.show()
+
