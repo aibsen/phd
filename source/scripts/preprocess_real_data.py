@@ -7,99 +7,84 @@ import h5py
 import os, sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from preprocess_data_utils import *
-
+import matplotlib.pyplot as plt
 #load real light curves
 
-snIas=None
-for i in range(11):
-    snIas_str = '../../data/testing/csvs/snIa_{}.csv'.format(i)
-    # print(snIas_str)
-    snIa = pd.read_csv(snIas_str,sep="|").dropna(axis=1)
-    if snIas is None:
-        snIas = pd.concat([snIas, snIa],ignore_index=True)
-    else:
-        snIas = snIa
-snIas.columns = ["id","time","flux","fluxerr","band"]
-
-snIbcs_str='../../data/testing/csvs/snIbc.csv'
-snIbcs = pd.read_csv(snIbcs_str,sep="|").dropna(axis=1)
-snIbcs.columns = ["id","time","flux","fluxerr","band"]
-
-snIIn_str='../../data/testing/csvs/snIIn.csv'
-snIIn = pd.read_csv(snIIn_str,sep="|").dropna(axis=1)
-snIIn.columns = ["id","time","flux","fluxerr","band"]
-
-snIIp_str='../../data/testing/csvs/snIIP.csv'
-snIIp = pd.read_csv(snIIp_str,sep="|").dropna(axis=1)
-snIIp.columns = ["id","time","flux","fluxerr","band"]
-
-sns_list=[snIas,snIbcs,snIIn,snIIp]
-sns=pd.concat(sns_list)
-
-data = []
-tags = []
-ids = []
-
-
-for t, sn in enumerate(sns_list):
-    # print("type ", type)
-    sn_tags = df_tags(sn, t)
-    if len(tags)==0:
-         tags=sn_tags
-    else:
-        tags=pd.concat([tags,sn_tags])
-
-def construct_vectors(sns,filename,meta_file=None,percentile=None):
+def construct_vectors(sns,tags,filename,meta_file=None,days_obs=30,point_count=3):
     print('\n')
     print(len(sns))
 
-    lc_length,ids_enough_obs=check_lc_length(sns,percentile)
-    print("constructing vectors of real data for lcs with at least {} days observations ".format(int(lc_length)))
-    print(len(ids_enough_obs))
+    sns_cp = sns.copy()
+    group_by_id = sns_cp.groupby(['id'])['time'].agg(['min', 'max']).rename(columns = lambda x : 'time_' + x).reset_index()
+    group_by_id["time_diff"]=group_by_id.time_max-group_by_id.time_min
+    
+    #ensure there is at least 30 days of obsevations
+    ids_enough_obs=group_by_id[group_by_id.time_diff>days_obs].id.values
+    group_by_id = group_by_id[group_by_id.id.isin(ids_enough_obs)]
     sn_enough=sns[sns.id.isin(ids_enough_obs)]
-    tags_enough = tags[tags.id.isin(ids_enough_obs)]
+
+    #ensure there is at least 3 points per band
+    group_by_id_band = sn_enough.groupby(['id','band'])['time'].agg(['count']).rename(columns = lambda x : 'time_' + x).reset_index()
+    #drop all lcs that have less than 3 points
+    at_least_3 = group_by_id_band[group_by_id_band.time_count>=point_count]
+    #drop also their companion band
+    band_counts = at_least_3.groupby(['id']).count().reset_index()
+    band_counts = band_counts[band_counts.time_count==2]
+    sn_enough=sn_enough[sn_enough.id.isin(band_counts.id)]
+    tags_enough = tags[tags.objid.isin(band_counts.id)]
+
     #coonvert bands to the code's sim uses (r=0, g=1)
     #instead of lasair's (g=1, r=2)
     sn_enough.loc[sn_enough.band==2,'band'] = 0
-    print(tags_enough.head())
-    tags_enough["old_id"]=tags_enough['id']
-    print(tags_enough.head())
-    for c,i in enumerate(tags_enough.old_id.unique()):
-        tags_enough.loc[tags_enough.old_id==i,'id']=c
-        sn_enough.loc[sn_enough.id==i,'id'] = c
-    print(tags_enough.head())
 
-    scaled_lc_length = int(np.ceil(128*lc_length/328))
+    count = 0
+    max_length = group_by_id.time_diff.max()
+    max_scaled_length = int(np.ceil(128*max_length/128))
+    X=np.zeros((tags_enough.shape[0],4,max_scaled_length+2))
 
-    if metafile:
-        tags_enough.to_csv(metafile.format(str(percentile),scaled_lc_length))
-    print(sn_enough)
-    X, obids, Y = create_interpolated_vectors(sn_enough, tags_enough, scaled_lc_length, dtype='real',n_channels=4)
-    # break
-    print("data shape ", X.dtype)
-    print("tags shape ",Y.dtype)
-    print("ids shape ",obids.dtype,"\n")
+    obids = tags_enough.objid.unique()
+    for n,objid in enumerate(obids):
+        lc = sn_enough[sn_enough.id == objid]
+        lc_r = lc[lc.band == 0] 
+        lc_g = lc[lc.band == 1]
+        # print(objid)
+        lc_length = group_by_id.loc[group_by_id.id == objid, 'time_diff'].values[0]
+        lc_start = group_by_id.loc[group_by_id.id == objid, 'time_min'].values[0]
+        lc_stop = group_by_id.loc[group_by_id.id == objid, 'time_max'].values[0]
+        scaled_lc_length=int(np.ceil(128*lc_length/128))
+        lc_step = lc_length/scaled_lc_length
+        new_x = np.arange(lc_start,lc_stop+1,lc_step)
+        X[n,0,0:scaled_lc_length+2] = np.interp(new_x,lc_r.time, lc_r.flux)
+        X[n,1,0:scaled_lc_length+2] = np.interp(new_x,lc_g.time, lc_g.flux)
 
-    print(obids.astype(int))
+        for i in range(scaled_lc_length+1):
+            X[n,2,i] = np.abs(lc_r.time.values - new_x[i]).min()
+            X[n,3,i] = np.abs(lc_g.time.values - new_x[i]).min()
+            
+    print(X.shape)
+    print(tags_enough.id.unique().shape)
+    print(tags_enough.tag.values.shape)
+
     dataset = {
     'X':X,
-    'Y':Y,
-    'ids':obids.astype(int)
+    'Y':tags_enough.tag.values,
+    'ids':tags_enough.id.unique()
     }
-    # save_vectors(dataset,filename.format(percentile,scaled_lc_length))
+    # print(dataset)
+
+    if metafile:
+        tags_enough.to_csv(meta_file)
     save_vectors(dataset,filename)
 
 
-
-
-# percentiles = ['25%','50%','75%']
-# for p in percentiles:
-#     metafile="real_data_tags_{}p_{}.csv"
-#     filename = "real_data_{}p_{}.h5"
-#     construct_vectors(sns,filename,metafile,p)
-#     #
-
-
-metafile="real_data_tags_40th_16l.csv"
-filename = "real_data_40th_16l.h5"
-construct_vectors(sns,filename,metafile)
+data_dir="../../data/testing/27-06-2020-sns/"
+filename = "data_4_types.csv"
+data = pd.read_csv(data_dir+filename)
+metafile = "metadata_4_types.csv"
+metadata = pd.read_csv(data_dir+metafile)
+# print(data)
+counts = [3,5,10,15,20,25,30,35,40]
+for c in counts:
+    filename = "real_data_30do_count{}.h5".format(c)
+    print(filename)
+    construct_vectors(data,metadata,filename,point_count=c)

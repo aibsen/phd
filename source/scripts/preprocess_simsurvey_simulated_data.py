@@ -18,7 +18,7 @@ data = []
 tags = []
 ids = []
 
-for i in np.arange(9):
+for i in np.arange(4): #half the files
     for type in types:
         print("building vectors for file ",str(i), " of type ",str(type))
         #load snIa simulated lightcurves
@@ -31,7 +31,7 @@ for i in np.arange(9):
         sns = sns[sns['flux']>=0]
         #now do transform
         # print(sns.head())
-        sns.loc[sns.band==0,'flux'] = flux_to_abmag(sns.loc[sns.band==0, 'flux'],zp=26.275)#26.275
+        sns.loc[sns.band==0,'flux'] = flux_to_abmag(sns.loc[sns.band==0, 'flux'],zp=26.275)#26.275 ?? esto está mal
         sns.loc[sns.band==1, 'flux'] = flux_to_abmag(sns.loc[sns.band==1, 'flux'],zp=26.325)#26.325
         #now ensure that all objects have two bands
         group_by_id_band = sns.groupby(['id','band'])['time'].agg(['count']).rename(columns = lambda x : 'time_' + x).reset_index()
@@ -40,13 +40,16 @@ for i in np.arange(9):
         usable_ids = list(set(ids_enough_point_count.index.values))
         sns = sns[sns.id.isin(usable_ids)]
         # print(sns.shape)
-        sns_tags = df_tags(sns, type)
 
+        # t = type if type < 3 else 2 
+        # t = 2 if type == 3 else type 
+        # sns_tags = df_tags(sns, t)
+        sns_tags = df_tags(sns, type)
         id_count = int(sns_tags.id.tail(1).values+1)
 
         print("shape of df ", sns.shape)
         print("shape of tags ",sns_tags.shape)
-        X,id,Y = create_interpolated_vectors(sns,sns_tags,328,n_channels=4)
+        X,id,Y = create_interpolated_vectors(sns,sns_tags,128,n_channels=4)
         print("shape of vectors", X.shape)
         print("shape of tags", Y.shape)
         if len(data) == 0:
@@ -71,4 +74,4 @@ dataset = {
     'ids':ids
 }
 
-save_vectors(dataset,"unbalanced_dataset_m_realzp_328.h5")
+save_vectors(dataset,"unbalanced_dataset_m_realzp_128_small.h5")

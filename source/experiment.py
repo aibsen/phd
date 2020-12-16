@@ -258,16 +258,16 @@ class Experiment(nn.Module):
 
             if self.metric == "accuracy":
                 val_mean_accuracy = np.mean(current_epoch_metrics['val_acc'])
-                # if val_mean_accuracy > self.best_val_model_acc:
-                if val_mean_accuracy > self.best_val_model_idx:
-                    # self.best_val_model_acc = val_mean_accuracy
+                if val_mean_accuracy > self.best_val_model_acc: #FIX THIS
+                # if val_mean_accuracy > self.best_val_model_idx:
+                    self.best_val_model_acc = val_mean_accuracy
                     self.best_val_model_idx = epoch_idx
 
             elif self.metric == "f1_score":
                 val_mean_f1 = np.mean(current_epoch_metrics['val_f1'])
-                # if val_mean_f1 > self.best_val_model_f1:
-                if val_mean_f1 > self.best_val_model_idx:
-                    # self.best_val_model_f1 = val_mean_f1
+                if val_mean_f1 > self.best_val_model_f1:
+                # if val_mean_f1 > self.best_val_model_idx:
+                    self.best_val_model_f1 = val_mean_f1
                     self.best_val_model_idx = epoch_idx
 
             self.save_model(model_save_dir=self.experiment_saved_models,

@@ -43,7 +43,7 @@ def pkl_to_df(pkl_filename, first_id = 0):
 #receives dataframe with lightcurves of a type
 #returns a series? with a tag for all of the ids
 def df_tags(df_sn, t):
-    print(len(df_sn))
+    # print(len(df_sn))
     sn_ids = df_sn.id.unique()
     df_sn_tags = pd.DataFrame(data=sn_ids, columns = ["id"])
     df_sn_tags.loc[:,"type"] = t
@@ -53,21 +53,21 @@ def create_interpolated_vectors(data, tags, length, dtype='sim', n_channels=2):
     obj_ids = tags.id.unique()
     data_cp = data.copy()
     # if dtype == 'sim':
-    data_cp['ob_p']=data.id*10+data.band
+    # data_cp['ob_p']=data.id*10+data.band
     # elif dtype == 'real':
-    #     data_cp['ob_p']=data.id+data.band.apply(lambda band: str(band))
+    data_cp['ob_p']=data.id+data.band.apply(lambda band: str(band))
 
     #sanity check
-    print("there are",data_cp.id.unique().size, "objects")
-    print("there are",data_cp.ob_p.unique().size, "lightcurves")
-    print("is the n_lcs twice n_objs?",data_cp.id.unique().size*2==data_cp.ob_p.unique().size)
+    # print("there are",data_cp.id.unique().size, "objects")
+    # print("there are",data_cp.ob_p.unique().size, "lightcurves")
+    # print("is the n_lcs twice n_objs?",data_cp.id.unique().size*2==data_cp.ob_p.unique().size)
 
     #get dataframe with min and max mjd values per each object id
     group_by_mjd = data_cp.groupby(['id'])['time'].agg(['min', 'max']).rename(columns = lambda x : 'time_' + x).reset_index()
     merged = pd.merge(data_cp, group_by_mjd, how = 'left', on = 'id')
 
     #sanity check
-    print("do I still have the same nobjs",merged.id.unique().size == data_cp.id.unique().size)
+    # print("do I still have the same nobjs",merged.id.unique().size == data_cp.id.unique().size)
 
     #scale mjd according to max mjd, min mjd and the desired length of the light curve (128)
     merged['scaled_time'] = (length - 1) * (merged['time'] - merged['time_min'])/(merged['time_max']-merged['time_min'])
@@ -75,12 +75,12 @@ def create_interpolated_vectors(data, tags, length, dtype='sim', n_channels=2):
     merged['cc'] = merged.groupby(['ob_p'])['count'].cumcount()
     merged=merged.sort_values(['id','time'])
     #sanity check
-    print("still?",merged.id.unique().size==data_cp.id.unique().size)
+    # print("still?",merged.id.unique().size==data_cp.id.unique().size)
 
     #reshape df so that for each row there's one lightcurve (2 rows per obj) and each column is a point of it
     # there is two main columns also, for flux and for mjd
     unstack = merged[['ob_p', 'scaled_time', 'flux', 'cc']].set_index(['ob_p', 'cc']).unstack()
-    print("still when unstacking?",unstack.shape[0]== data_cp.id.unique().size*2)
+    # print("still when unstacking?",unstack.shape[0]== data_cp.id.unique().size*2)
     #transform above info into numpy arrays
     time_uns = unstack['scaled_time'].values[..., np.newaxis]
     flux_uns = unstack['flux'].values[..., np.newaxis]
@@ -181,17 +181,34 @@ def create_interpolated_vectors_plasticc(data, tags, length, dtype='sim', n_chan
     return vectors, obj_ids, tags.true_target.values
 
 
+def append_vectors(dataset,outputFile):
+    with h5py.File(outputFile, 'a') as hf:
+        X=dataset["X"]
+        hf["X"].resize((hf["X"].shape[0] + X.shape[0]), axis = 0)
+        hf["X"][-X.shape[0]:] = X
+
+        ids = dataset["ids"]
+        hf["ids"].resize((hf["ids"].shape[0] + ids.shape[0]), axis = 0)
+        hf["ids"][-ids.shape[0]:] = ids
+
+        Y=dataset["Y"]
+        hf["Y"].resize((hf["Y"].shape[0] + Y.shape[0]), axis = 0)
+        hf["Y"][-Y.shape[0]:] = Y
+        hf.close()
+
 
 
 def save_vectors(dataset, outputFile):
     hf=h5py.File(outputFile,'w')
+
     print("writing X")
-    hf.create_dataset('X',data=dataset['X'])
+    hf.create_dataset('X',data=dataset['X'],compression="gzip", chunks=True, maxshape=(None,None,None,))
+
     print("writing ids")
-    print(dataset['ids'])
-    hf.create_dataset('ids',data=dataset['ids'],dtype='int64')
+    hf.create_dataset('ids',data=dataset['ids'],dtype='int64',compression="gzip", chunks=True, maxshape=(None,))
+    
     print("writing Y")
-    hf.create_dataset('Y',data=dataset['Y'])
+    hf.create_dataset('Y',data=dataset['Y'],compression="gzip", chunks=True, maxshape=(None,))
     hf.close()
 
 def flux_to_abmag(f,zp=30):
