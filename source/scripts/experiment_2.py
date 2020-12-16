@@ -15,7 +15,7 @@ from torchvision import transforms
 from transforms import RandomCrop,ZeroPad,RightCrop
 
 results_dir = "../../results/"
-interpolated_dataset_filename = "../../data/training/linearly_interpolated/unbalanced_dataset_m_realzp_128.h5"
+interpolated_dataset_filename = "../../data/training/linearly_interpolated/unbalanced_dataset_m_realzp_128_3types.h5"
 real_dataset_filename = "../../data/testing/real_data_30_careful.h5"
 
 lc_length = 128
@@ -25,13 +25,10 @@ lr = 1e-03
 wdc = 1e-03
 batch_size = 64
 n_seeds = 5
-balance_training_set = True
 
 ############ PART 1 ###############
 #training using complete simulated light curves and cropped light curves (1st bits) (50% + 25%+10%) (padded) 
 #testing using padded real light curves chopped. 10% of lcs
-############ PART 2 ###############
-#same experiment but with a balanced dataset
 
 #load dataset
 train_dataset = LCs(lc_length, interpolated_dataset_filename)
@@ -62,19 +59,19 @@ if train_dataset[0][0].shape == test_dataset[0][0].shape:
     #define network params
     fcn_params = {
         "input_shape": input_shape,
-        "num_output_classes" : 4,
+        "num_output_classes" : 3,
         "regularize" : False,
         "global_pool" : 'max'
     }
     resnet_params = {
         "input_shape": input_shape,
-        "num_output_classes" : 4,
+        "num_output_classes" : 3,
         "global_pool":'avg',
         "n_blocks":3
     }
     gru_params = {
         "input_shape": input_shape,
-        "num_output_classes" : 4,
+        "num_output_classes" : 3,
         "hidden_size":100,
         "batch_size":batch_size,
         "attention":"no_attention",
@@ -83,7 +80,7 @@ if train_dataset[0][0].shape == test_dataset[0][0].shape:
         }
     grusa_params = {
         "input_shape": input_shape,
-        "num_output_classes" : 4,
+        "num_output_classes" : 3,
         "hidden_size":100,
         "batch_size":batch_size,
         "attention":"self_attention",
@@ -96,12 +93,10 @@ if train_dataset[0][0].shape == test_dataset[0][0].shape:
         "learning_rate" : lr,
         "weight_decay_coefficient" : wdc,
         "use_gpu" : use_gpu,
-        "batch_size" : batch_size,
-        "balance_training_set" : balance_training_set
+        "batch_size" : batch_size
     }
     #2.C RNN
-    # exp_name = "exp2_p1_gru"
-    exp_name = "exp2_p2_gru"
+    exp_name = "exp1_p2_gru"
     gru = GRU1D(gru_params)
     exp_params["network_model"] = gru
     experiment = SeededExperiment(
@@ -118,8 +113,7 @@ if train_dataset[0][0].shape == test_dataset[0][0].shape:
 
 
     #2.D RNN-attention
-    # exp_name = "exp2_p1_grusa"
-    exp_name = "exp2_p2_grusa"
+    exp_name = "exp2_p1_grusa"
     grusa = GRU1D(grusa_params)
     exp_params["network_model"] = grusa
     experiment = SeededExperiment(
@@ -135,8 +129,7 @@ if train_dataset[0][0].shape == test_dataset[0][0].shape:
     print("--- %s seconds ---" % (time.time() - start_time))
 
     #2.A FCN
-    # exp_name = "exp2_p1_fcn"
-    exp_name = "exp2_p2_fcn"
+    exp_name = "exp2_p1_fcn"
     fcn = FCNN1D(fcn_params)
     exp_params["network_model"] = fcn
     experiment = SeededExperiment(
@@ -151,8 +144,7 @@ if train_dataset[0][0].shape == test_dataset[0][0].shape:
     print("--- %s seconds ---" % (time.time() - start_time))
 
     #2.B ResNet
-    # exp_name = "exp2_p1_resnet"
-    exp_name = "exp2_p2_resnet"
+    exp_name = "exp2_p1_resnet"
     resnet = ResNet1D(resnet_params)
     exp_params["network_model"] = resnet
     experiment = SeededExperiment(
