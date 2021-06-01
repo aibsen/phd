@@ -38,6 +38,7 @@ test_length = len(test_dataset)
 
 
 #apply transforms so we'll be training with 100, 50, 25 and 10 percent of light curves
+"""I need to change this because I changed my definition of earliness"""
 if train_dataset[0][0].shape == test_dataset[0][0].shape:
     train_length1 = int(train_length/4)
     train_length2 = int(train_length/4)

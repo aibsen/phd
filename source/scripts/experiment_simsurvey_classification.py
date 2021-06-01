@@ -6,26 +6,24 @@ import time
 import h5py
 import os, sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from datasets import LCs, CachedLCs 
-from transforms import RandomCrop,ZeroPad,RightCrop
+from datasets import LCs
 from recurrent_models import GRU1D
 from convolutional_models import FCNN1D, ResNet1D
-# from experiment import Experiment
 from seeded_experiment import SeededExperiment
 from plot_utils import *
 from torchvision import transforms
+from transforms import RandomCrop,ZeroPad,RightCrop
 
+"""This script is for running an experiment of classification of simsurvey lightcurves,
+    using 4 different NN models: FCN, ResNet, GRU, and GRU-SA """
 
 results_dir = "../../results/"
 interpolated_dataset_filename = "../../data/training/linearly_interpolated/unbalanced_dataset_m_realzp_128_3types_small.h5"
 
 lc_length = 128
-lc_transform_length = 64
-
-random_crop=RandomCrop(lc_transform_length,lc_length)
-
-num_epochs = 100
-seed = 782915
+num_epochs = 30
+seed = 1772670
+torch.manual_seed(seed=seed)
 use_gpu = True
 lr = 1e-03
 wdc = 1e-03
@@ -51,9 +49,23 @@ def load_datasets(lc_length, interpolated_dataset_filename, transform=None):
 
     return train_dataset, val_dataset, test_dataset, train_dataset[0][0].shape
 
+def save_plots(results_dir,exp_name):
+    validation_results = pd.read_csv(results_dir+exp_name+"/result_outputs/validation_results.csv")
+    true_tagsv = validation_results.true_tags.values
+    predictedv = validation_results.predicted_tags.values
+    plotfile = results_dir+exp_name+"/result_outputs/validation_cm_nomalized.png"
+    plot_cm(plotfile,true_tagsv,predictedv)
+    plotfile = results_dir+exp_name+"/result_outputs/validation_cm.png"
+    plot_cm(plotfile,true_tagsv,predictedv,False)
 
-############ PART 1 ############### 100% LCs
-# training/testing with complete light curves for all 4 models.
+    test_results = pd.read_csv(results_dir+exp_name+"/result_outputs/test_results.csv")
+    true_tags = test_results.true_tags.values
+    predicted = test_results.predicted_tags.values
+    plotfile = results_dir+exp_name+"/result_outputs/test_cm_nomalized.png"
+    plot_cm(plotfile,true_tags,predicted)
+    plotfile = results_dir+exp_name+"/result_outputs/test_cm.png"
+    plot_cm(plotfile,true_tags,predicted,False)
+
 
 train_dataset, val_dataset, test_dataset, input_shape = load_datasets(lc_length,interpolated_dataset_filename)
 
