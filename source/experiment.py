@@ -30,7 +30,7 @@ class Experiment(nn.Module):
         weight_decay_coefficient=0, 
         use_gpu=True, 
         continue_from_epoch=-1, 
-        num_output_classes=4, 
+        num_output_classes=11, 
         best_idx=0, 
         verbose=True,
         cached_dataset=False):

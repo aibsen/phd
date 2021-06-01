@@ -283,3 +283,47 @@ def check_lc_length(data, percentile=None):
     group_by_id_band = group_by_id_band.groupby(['id']).count()
     ids_enough_point_count = group_by_id_band[group_by_id_band.time_count==2]
     return td_threshold, list(set(ids_enough_point_count.index.values))
+
+def ids_for_lasair():
+    """it takes a tns metafile and returns a string-like list of ids to use to query lasair with
+    !!!need to check out format"""
+    real_sns = pd.read_csv(metadata_file)
+
+    ids = real_sns["Disc. Internal Name"].drop_duplicates()
+    ids = ids.dropna()
+    ids = ids[ids.str.contains("ZTF")]
+    ids = ids.str.split(",").apply(lambda x: x[0].strip() if "ZTF" in x[0] else x[1].strip()).values
+
+    id_str = ''
+    for i in ids:
+        id_str= id_str+'"'+i+'", '
+    
+    return id_str
+
+data_file="tns_search_sn_metadata.csv"
+metadata_file = current_real_data_dir+data_file
+colors = ['#00dbdd','#fd8686','#f9d62d','#b5d466','#ffa77c']
+sn_dict = {'SN Ia':'Ia', 'SN Ib':'Ib/c', 'SN Ic':'Ib/c', 'SN II':'II','SLSN':'SLSN'}
+plot_sns_by_type(sn_dict, metadata_file, colors)
+plot_sns_by_date(metadata_file,colors[-1])
+
+def merge_metadata(current_real_data_dir, n_files=5):
+#this function is for reading metadata files downloaded from tns server and merging
+#them together into one for later easier analysis. it receives the initial data
+#directory and the number of files in it.
+
+    data_file = "tns_search.csv"
+    df=pd.read_csv(current_real_data_dir+data_file)
+
+    for i in np.arange(1,n_files+1):
+        data_file = current_real_data_dir+"tns_search({}).csv".format(i)
+        print(data_file)
+        df2 = pd.read_csv(data_file)
+        df = pd.concat([df,df2])
+        # print(df.head())
+        print(df.shape)
+
+    print(df.keys())
+    df=df.drop_duplicates(keep="first")
+
+    df.to_csv(current_real_data_dir+"tns_search_sn_metadata.csv",index=False)
