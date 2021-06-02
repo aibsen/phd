@@ -4,24 +4,72 @@ import numpy as np
 import h5py
 
 # plasticc_sn_tags = {'90':0, '67':1, '52':2, '42':3, '62': 4, '95': 5}
-plasticc_sn_tags =[90,67,52,42,62,95]
+# plasticc_sn_tags =[90,67,52,42,62,95]
 
-def retag_plasticc(metadata):
-    #choosing supernovae only
-    sn_metadata = metadata[metadata["true_target"].isin(plasticc_sn_tags)].copy()
-    sn_metadata.loc[:,"true_target"] = [plasticc_sn_tags.index(tag) for tag in sn_metadata["true_target"]]
-    return sn_metadata
+"""for files in the Transient Name Server format (.csv)"""
+def filter_metadata_by_type(metadata_file,types_I_want):
+    """Receives a metadata file from TNS and changes tags to numbers     
+    Parameters
+    ----------
+    metadata_file : str, path to metadata downloaded from the transient name server in .csv format
+    types_I_want : dict, mapping a TNS server tag to the numerical type I want to assign
 
-def filter_metadata_by_type(metadata,types_I_want):
-#receives a dict with of types by name as provided by TNS and the numerical tags I want to give them
+    Returns
+    -------
+    metadata : pandas DataFrame with numerical types instead of TNS string types
+    """
+    metadata = pd.read_csv(metadata_file)
     metadata = metadata[metadata["Obj. Type"].isin(types_I_want.keys())]
     for k,v in types_I_want.items():
         metadata.loc[metadata["Obj. Type"]==k,"tag"] = v
     return metadata
 
-#receives a filename that contains the simsurvey simulated lightcurves and returns
-# a dataframe with the light curves with a sensible format for easier handling.
+def merge_metadata(current_real_data_dir, n_files=5):
+    """Function for reading metadata files downloaded from TNS and merging them 
+    together into one for ease of use. It write the final metadata file to current_real_data_dir
+    Parameters
+    ----------
+    current_real_data_dir: str, path to directory where file dowloaded from TNS (named tns_search.csv) is.
+    n_files: int, number of total metadatdata files in the directory"""
+
+    metadata_file = "tns_search.csv"
+    df=pd.read_csv(current_real_data_dir+metadata_file)
+
+    for i in np.arange(1,n_files+1):
+        metadata_file = current_real_data_dir+"tns_search({}).csv".format(i)
+        df2 = pd.read_csv(metadata_file)
+        df = pd.concat([df,df2])
+    df=df.drop_duplicates(keep="first")
+    df.to_csv(current_real_data_dir+"tns_search_sn_metadata.csv",index=False)
+
+"""for files in the PLAsTiCC format (DataFrame)"""
+
+def retag_plasticc(metadata,plasticc_tags):
+    """Receives a metadata DataFrame read in the PLASTiCC format and changes tags to be between 0 and the number of types wanted.    
+    Parameters
+    ----------
+    metadata : pandas DataFrame, metadata DF read from PLASTiCC dataset
+    plasticc_tags: array, contains all the PLAsTiCC types I want to use, in order
+    -------
+    sn_metadata : pandas DataFrame with different numerical types
+    """
+    #choosing given tags only
+    sn_metadata = metadata[metadata["true_target"].isin(plasticc_tags)].copy()
+    sn_metadata.loc[:,"true_target"] = [plasticc_tags.index(tag) for tag in sn_metadata["true_target"]]
+    return sn_metadata
+
+"""for files in Simsurvey format (.pkl)"""
+
 def pkl_to_df(pkl_filename, first_id = 0):
+    """Receives a path to a .pkl produced by simsurvey and returns a pandas DataFrame with the
+    same light curves in an easier to handle format
+    ----------
+    pkl_filename : str, path to .pkl produced by simsurvey that contains simulated light curves
+    first_id: int, optional. the first numerical id to be used when assigning it to a simulated light curve.
+    -------
+    df_sn : pandas DataFrame, contains input lightcurves where each row contains 
+        id, time, band, flux, fluxerr for a given point in a light curve
+    """
     sn_data = pd.read_pickle(pkl_filename)
     df = pd.DataFrame(data=sn_data["lcs"], dtype=np.int8)
     df_sn = df.stack(dropna=True)
@@ -39,48 +87,168 @@ def pkl_to_df(pkl_filename, first_id = 0):
     df_sn.loc[df_sn.band == 'ztfg', 'band'] = 1
     return df_sn
 
+def is_flux_to_abmag_working(filename, trial_size):
+    """Sanity check to see if flux-mag conversion is working
+    Parameters
+    ----------
+    filaname: .pkl filename as given by simsurvey
+    trial_size: the number of light curves to be checked"""
+    trial = pd.read_pickle(filename)
+    lcs_trial = trial["lcs"][0:trial_size]
+    stats = trial["stats"]
+    maxmg_trial=stats["mag_max"]["ztfg"][0:trial_size]
+    maxmr_trial=stats["mag_max"]["ztfr"][0:trial_size]
+    maxfg_trial=np.zeros(trial_size)
+    maxfr_trial=np.zeros(trial_size)
+    for count in np.arange(trial_size):
+        r=np.array(list(filter(lambda p: p["band"]=='ztfr' , lcs_trial[count])))
+        g=np.array(list(filter(lambda p: p["band"]=='ztfg' , lcs_trial[count])))
 
-#receives dataframe with lightcurves of a type
-#returns a series? with a tag for all of the ids
+        maxfr_trial[count] = np.amax(np.array(list(map(lambda p: p["flux"], r))))
+        maxfg_trial[count]= np.amax(np.array(list(map(lambda p: p["flux"], g))))
+
+    df_trial = pd.DataFrame({"mg":maxmg_trial, "mr":maxmr_trial, "fg":maxfg_trial, "fr":maxfr_trial})
+    df_trial["fg"]=flux_to_abmag(df_trial["fg"].values)
+    df_trial["fr"]=flux_to_abmag(df_trial["fr"].values)
+    if (df_trial["fg"]==df_trial["mg"]).all() and (df_trial["fr"]==df_trial["mr"]).all():
+        print("yes, it is")
+    else:
+        print("no, it ain't")    
+
+"""Miscellaneous"""
 def df_tags(df_sn, t):
-    # print(len(df_sn))
+    """Receives a Dataframe with lightcurves of a single type 
+    and returns column with types for all unique ids
+    Parameters
+    ----------
+    df_sn : pandas DataFrame, data DF in PLASTiCC format
+    t: int, tag of type
+    Returns
+    -------
+    df_sn_tags : pandas column of types for unique ids
+    """
     sn_ids = df_sn.id.unique()
     df_sn_tags = pd.DataFrame(data=sn_ids, columns = ["id"])
     df_sn_tags.loc[:,"type"] = t
     return df_sn_tags
 
-def create_interpolated_vectors(data, tags, length, dtype='sim', n_channels=2):
+def flux_to_abmag(f,zp=30):
+    """Converts a flux to ab magnitude
+    Parameters
+    ----------
+    f: float, flux
+    zp: float, zero point value
+    Returns
+    -------
+    ab magnitude
+    """
+    return zp-2.5*np.log10(f)
+
+def abmag_to_flux(mag,zp=30):
+    """Converts ab_magnitude to flux
+    Parameters
+    ----------
+    mag: magnitude
+    zp: float, zero point value
+    Returns
+    -------
+    flux
+    """
+    return np.power(10,(zp-mag)/2.5)
+
+""" Lasair utilities """
+def load_real_lcs(sn_filename):
+    """Takes a .csv file in Lasair format, drops nans, changes column names and 
+    bands to make them consisten with simsurvey data
+    ----------
+    sn_filename: str, path to .csv file in Lasair format
+    Returns
+    -------
+    Pandas DataFrame with updated data
+    """
+    sn = pd.read_csv(sn_filename,sep="|").dropna(axis=1)
+    #rename columns
+    sn.columns = ["id","time","flux","flux_err","band"]
+    #make passbands consistent with simulated data (0,1 instad of 1,2)
+    sn.loc[sn["band"]==2,"band"] = 0
+    return sn
+
+def ids_for_lasair(metadata_file):
+    """it takes a tns metafile and returns a string-like list of ids to use to query lasair with
+    Parameters
+    ----------
+    metadat_file: str,path to tns like .csv containing metadat
+    Returns
+    -------
+    ids_str: str with all ids to get from lasair
+    """
+    real_sns = pd.read_csv(metadata_file)
+    ids = real_sns["Disc. Internal Name"].drop_duplicates()
+    ids = ids.dropna()
+    ids = ids[ids.str.contains("ZTF")]
+    ids = ids.str.split(",").apply(lambda x: x[0].strip() if "ZTF" in x[0] else x[1].strip()).values
+    id_str = ''
+    for i in ids:
+        id_str= id_str+'"'+i+'", '#fix this
+    return id_str
+
+"""Functions to generate .hdf5 files that will be loaded as datasets"""
+
+def create_interpolated_vectors(data, tags, length=128, n_passbands=2):
+    """Takes data in the PLAsTiCC format and the corresponding tags and returns the data
+    in the form of linearly interpolated vectors of size length, with extra channels that meassure
+    distances between interpolations and nearest real points. Dismisses fluxerrors.
+    This algorithm was originally coded by mammas for the PLAsTiCC challenge
+    Parameters
+    ----------
+    data: pandas DataFrame, contains data where each row is a lightcurve point.
+        PLAsTiCC columns are is object_id,mjd,flux, passband,
+        Simsurvey format is id, time, flux, band
+        #need to fix this
+    tags: pandas DataFrame, single column with tags of objects ordered by id. 
+        PLAsTiCC column is true_target
+        Simsurvey column is type
+        #need to fix this
+    length: int, optional. Desired length of interpolated light curves.
+    n_passbands: int, optional. Number of passbands in an object
+        PLAsTicc objects have 6 passbands
+        Simsurvey objects have 2 passbands
+    Returns
+    -------
+    (X, ids, Y) : array with interpolated vectors, ids and tags for them
+    """
     obj_ids = tags.id.unique()
     data_cp = data.copy()
-    # if dtype == 'sim':
-    # data_cp['ob_p']=data.id*10+data.band
-    # elif dtype == 'real':
-    data_cp['ob_p']=data.id+data.band.apply(lambda band: str(band))
-
+    if data.band:#then format is simsurvey like
+        data_cp['ob_p']=data.id+data.band.apply(lambda band: str(band))
+    elif data.passband:#then format is plasticc like and we need to change it
+        data_cp['ob_p']=data.object_id*10+data.passband
+        data_cp=data_cp.rename(columns={"object_id": "id", "mjd": "time","passband":"band"})
+        tags = tags.rename(columns={"true_target":"type"})
     #sanity check
     # print("there are",data_cp.id.unique().size, "objects")
     # print("there are",data_cp.ob_p.unique().size, "lightcurves")
-    # print("is the n_lcs twice n_objs?",data_cp.id.unique().size*2==data_cp.ob_p.unique().size)
-
+    # print("is the n_lcs = n_passbands times n_objs?",data_cp.id.unique().size*n_passbands==data_cp.ob_p.unique().size)
+    
     #get dataframe with min and max mjd values per each object id
     group_by_mjd = data_cp.groupby(['id'])['time'].agg(['min', 'max']).rename(columns = lambda x : 'time_' + x).reset_index()
     merged = pd.merge(data_cp, group_by_mjd, how = 'left', on = 'id')
-
     #sanity check
     # print("do I still have the same nobjs",merged.id.unique().size == data_cp.id.unique().size)
 
-    #scale mjd according to max mjd, min mjd and the desired length of the light curve (128)
+    #scale mjd according to max mjd, min mjd and the desired length of the light curve (128 default)
+    #here I need to think wether I really want the time scaled
     merged['scaled_time'] = (length - 1) * (merged['time'] - merged['time_min'])/(merged['time_max']-merged['time_min'])
     merged['count'] = 1
     merged['cc'] = merged.groupby(['ob_p'])['count'].cumcount()
     merged=merged.sort_values(['id','time'])
     #sanity check
-    # print("still?",merged.id.unique().size==data_cp.id.unique().size)
+    # print("still the same number of objects?",merged.id.unique().size==data_cp.id.unique().size)
 
-    #reshape df so that for each row there's one lightcurve (2 rows per obj) and each column is a point of it
+    #reshape df so that for each row there's one lightcurve (n_passbands rows per obj) and each column is a point of it
     # there is two main columns also, for flux and for mjd
     unstack = merged[['ob_p', 'scaled_time', 'flux', 'cc']].set_index(['ob_p', 'cc']).unstack()
-    # print("still when unstacking?",unstack.shape[0]== data_cp.id.unique().size*2)
+    # print("still same number of objects when unstacking?",unstack.shape[0]== data_cp.id.unique().size*n_passbands)
     #transform above info into numpy arrays
     time_uns = unstack['scaled_time'].values[..., np.newaxis]
     flux_uns = unstack['flux'].values[..., np.newaxis]
@@ -92,96 +260,32 @@ def create_interpolated_vectors(data, tags, length, dtype='sim', n_channels=2):
     n_lcs = time_flux.shape[0]
     #here we'll store interpolated lcs
     X = np.zeros((n_lcs, x.shape[0]))
-    t=range(n_lcs)
-    for i in t:
+    for i in range(n_lcs):
         if nan_masks[i].any(): #if any point is real
             X[i] = np.interp(x, time_flux[i][:, 0][nan_masks[i]], time_flux[i][:, 1][nan_masks[i]])
         else:
             X[i] = np.zeros_like(x)
 
-    n_objs = int(n_lcs/2)
+    n_objs = int(n_lcs/n_passbands)
     #reshape vectors so the ones belonging to the same object are grouped into 2 channels
-    X_per_band = X.reshape((n_objs,2,length)).astype(np.float32)
-
-    if n_channels == 4:
-    #get distance for each point to nearest real point
-        X_void = np.zeros((n_lcs, x.shape[0]))
-        t=range(length)
-        for i in t:
-            X_void[:, i] = np.abs((unstack["scaled_time"] - i)).min(axis = 1).fillna(500)
-
-        #reshape vectors so the ones belonging to the same object are grouped into 2 channels
-        X_void_per_band = X_void.reshape((n_objs,2,length)).astype(np.float32)
-        vectors = np.concatenate((X_per_band,X_void_per_band),axis=1)
-        return vectors, obj_ids, tags.type.values
-
-    elif n_channels == 2:
-        return X_per_band, obj_ids, tags.type.values
-
-def create_interpolated_vectors_plasticc(data, tags, length, dtype='sim', n_channels=6):
-    obj_ids = tags.object_id.unique()
-    data_cp = data.copy()
-    data_cp['ob_p']=data.object_id*10+data.passband
-
-    #sanity check
-    print("there are",data_cp.object_id.unique().size, "objects")
-    print("there are",data_cp.ob_p.unique().size, "lightcurves")
-    print("is the n_lcs 6x n_objs?",data_cp.object_id.unique().size*6==data_cp.ob_p.unique().size)
-
-    #get dataframe with min and max mjd values per each object id
-    group_by_mjd = data_cp.groupby(['object_id'])['mjd'].agg(['min', 'max']).rename(columns = lambda x : 'time_' + x).reset_index()
-    merged = pd.merge(data_cp, group_by_mjd, how = 'left', on = 'object_id')
-
-    #sanity check
-    print("do I still have the same nobjs",merged.object_id.unique().size == data_cp.object_id.unique().size)
-
-    #scale mjd according to max mjd, min mjd and the desired length of the light curve (128)
-    merged['scaled_time'] = (length - 1) * (merged['mjd'] - merged['time_min'])/(merged['time_max']-merged['time_min'])
-    merged['count'] = 1
-    merged['cc'] = merged.groupby(['ob_p'])['count'].cumcount()
-    merged=merged.sort_values(['object_id','mjd'])
-    #sanity check
-    print("still?",merged.object_id.unique().size==data_cp.object_id.unique().size)
-
-    #reshape df so that for each row there's one lightcurve (6 rows per obj) and each column is a point of it
-    # there is two main columns also, for flux and for mjd
-    unstack = merged[['ob_p', 'scaled_time', 'flux', 'cc']].set_index(['ob_p', 'cc']).unstack()
-    print("still when unstacking?",unstack.shape[0]== data_cp.object_id.unique().size*6)
-    #transform above info into numpy arrays
-    time_uns = unstack['scaled_time'].values[..., np.newaxis]
-    flux_uns = unstack['flux'].values[..., np.newaxis]
-    time_flux = np.concatenate((time_uns, flux_uns), axis =2)
-    #create a mask to get points that are valid (not nan)
-    #do this for time dim only, since fluxes will be nan when times are also
-    nan_masks = ~np.isnan(time_flux)[:, :, 0]
-    x = np.arange(length)
-    n_lcs = time_flux.shape[0]
-    #here we'll store interpolated lcs
-    X = np.zeros((n_lcs, x.shape[0]))
-    t=range(n_lcs)
-    for i in t:
-        if nan_masks[i].any(): #if any point is real
-            X[i] = np.interp(x, time_flux[i][:, 0][nan_masks[i]], time_flux[i][:, 1][nan_masks[i]])
-        else:
-            X[i] = np.zeros_like(x)
-
-    n_objs = int(n_lcs/6)
-    #reshape vectors so the ones belonging to the same object are grouped into 6 channels
-    X_per_band = X.reshape((n_objs,6,length)).astype(np.float32)
-
+    X_per_band = X.reshape((n_objs,n_passbands,length)).astype(np.float32)
     #get distance for each point to nearest real point
     X_void = np.zeros((n_lcs, x.shape[0]))
-    t=range(length)
-    for i in t:
+    for i in range(length):
         X_void[:, i] = np.abs((unstack["scaled_time"] - i)).min(axis = 1).fillna(500)
-
-    #reshape vectors so the ones belonging to the same object are grouped into 6 channels
-    X_void_per_band = X_void.reshape((n_objs,6,length)).astype(np.float32)
+    #reshape vectors so the ones belonging to the same object are grouped into n_passbands channels
+    X_void_per_band = X_void.reshape((n_objs,n_passbands,length)).astype(np.float32)
     vectors = np.concatenate((X_per_band,X_void_per_band),axis=1)
-    return vectors, obj_ids, tags.true_target.values
+    return vectors, obj_ids, tags.type.values
 
-
+"""Functions to save and update .hdf5 generated files"""
 def append_vectors(dataset,outputFile):
+    """It appends generated dataset dictionary into an existing .hdf5 file
+    Parameters
+    ----------
+    dataset: dict, dataset in the format {"X":,"ids":,"Y":}
+    outputFile: str, path to .hdf5 file to update
+    """
     with h5py.File(outputFile, 'a') as hf:
         X=dataset["X"]
         hf["X"].resize((hf["X"].shape[0] + X.shape[0]), axis = 0)
@@ -196,9 +300,13 @@ def append_vectors(dataset,outputFile):
         hf["Y"][-Y.shape[0]:] = Y
         hf.close()
 
-
-
 def save_vectors(dataset, outputFile):
+    """It wrotes generated dataset dictionary into a new .hdf5 file
+    Parameters
+    ----------
+    dataset: dict, dataset in the format {"X":,"ids":,"Y":}
+    outputFile: str, path to .hdf5 ouput
+    """
     hf=h5py.File(outputFile,'w')
 
     print("writing X")
@@ -210,120 +318,3 @@ def save_vectors(dataset, outputFile):
     print("writing Y")
     hf.create_dataset('Y',data=dataset['Y'],compression="gzip", chunks=True, maxshape=(None,))
     hf.close()
-
-def flux_to_abmag(f,zp=30):
-    return zp-2.5*np.log10(f)
-
-def abmag_to_flux(mag,zp=30):
-    return np.power(10,(zp-mag)/2.5)
-
-def is_flux_to_abmag_working(filename):
-    trial = pd.read_pickle(filename)
-    lcs_100 = trial["lcs"][0:100]
-    stats = trial["stats"]
-    maxmg_100=stats["mag_max"]["ztfg"][0:100]
-    maxmr_100=stats["mag_max"]["ztfr"][0:100]
-    maxfg_100=np.zeros(100)
-    maxfr_100=np.zeros(100)
-    for count in np.arange(100):
-        r=np.array(list(filter(lambda p: p["band"]=='ztfr' , lcs_100[count])))
-        g=np.array(list(filter(lambda p: p["band"]=='ztfg' , lcs_100[count])))
-
-        maxfr_100[count] = np.amax(np.array(list(map(lambda p: p["flux"], r))))
-        maxfg_100[count]= np.amax(np.array(list(map(lambda p: p["flux"], g))))
-    df_trial_100 = pd.DataFrame({"mg":maxmg_100, "mr":maxmr_100, "fg":maxfg_100, "fr":maxfr_100})
-    df_trial_100["fg"]=flux_to_abmag(df_trial_100["fg"].values)
-    df_trial_100["fr"]=flux_to_abmag(df_trial_100["fr"].values)
-    if (df_trial_100["fg"]==df_trial_100["mg"]).all() and (df_trial_100["fr"]==df_trial_100["mr"]).all():
-        print("yes is is")
-    else:
-        print("no it ain't")
-
-def load_real_lcs(sn_filename):
-    sn = pd.read_csv(sn_filename,sep="|").dropna(axis=1)
-    sn.dropna(axis=1)
-    #rename columns
-    sn.columns = ["id","time","flux","flux_err","band"]
-    #make passbands consistent with simulated data (0,1 instad of 1,2)
-    sn.loc[sn["band"]==2,"band"] = 0
-    return sn
-
-def check_lc_length(data, percentile=None):
-    #td_threshold: time difference threshold in mjd
-
-    #different ids for different passbands
-    data_cp = data.copy()
-    # print(data_cp)
-    # data_cp['id_b']=data.id+data.band.astype('str')
-    data_cp['id_b']=data.id+data.band.apply(lambda band: str(band))
-
-    #get ids of real objects that have at least d days of observations
-    #d is defined as the value which percentile% of the data falls below
-    group_by_id = data_cp.groupby(['id'])['time'].agg(['min', 'max']).rename(columns = lambda x : 'time_' + x).reset_index()
-    group_by_id["time_diff"]=group_by_id.time_max-group_by_id.time_min
-    group_by_id_band = data_cp.groupby(['id','band'])['time'].agg(['count']).rename(columns = lambda x : 'time_' + x).reset_index()
-
-    if percentile :
-        td_stats=group_by_id.describe()
-        #get percentile threshold value. x% of data falls below this value.
-        td_threshold=td_stats.loc[percentile,'time_diff']
-        print("time diff threshold for percentile ",percentile, " is ",td_threshold)
-        ids_enough_obs_days=group_by_id[group_by_id.time_diff>td_threshold].id.values
-        #get ids of real objects that have at least c points per passband
-        #c is defined as the value which percentile% of the data falls below
-        # td_stats=group_by_id_band.describe()
-        # tc_threshold=td_stats.loc[percentile,'time_count']
-        # print("point count threshold for percentile ",percentile, " is ",tc_threshold)
-        # group_by_id_band=group_by_id_band[group_by_id_band.time_count>tc_threshold]
-
-    else :
-        ids_enough_obs_days=group_by_id[group_by_id.time_diff>40].id.values
-        td_threshold=40
-
-    group_by_id_band = group_by_id_band.groupby(['id']).count()
-    ids_enough_point_count = group_by_id_band[group_by_id_band.time_count==2]
-    return td_threshold, list(set(ids_enough_point_count.index.values))
-
-def ids_for_lasair():
-    """it takes a tns metafile and returns a string-like list of ids to use to query lasair with
-    !!!need to check out format"""
-    real_sns = pd.read_csv(metadata_file)
-
-    ids = real_sns["Disc. Internal Name"].drop_duplicates()
-    ids = ids.dropna()
-    ids = ids[ids.str.contains("ZTF")]
-    ids = ids.str.split(",").apply(lambda x: x[0].strip() if "ZTF" in x[0] else x[1].strip()).values
-
-    id_str = ''
-    for i in ids:
-        id_str= id_str+'"'+i+'", '
-    
-    return id_str
-
-data_file="tns_search_sn_metadata.csv"
-metadata_file = current_real_data_dir+data_file
-colors = ['#00dbdd','#fd8686','#f9d62d','#b5d466','#ffa77c']
-sn_dict = {'SN Ia':'Ia', 'SN Ib':'Ib/c', 'SN Ic':'Ib/c', 'SN II':'II','SLSN':'SLSN'}
-plot_sns_by_type(sn_dict, metadata_file, colors)
-plot_sns_by_date(metadata_file,colors[-1])
-
-def merge_metadata(current_real_data_dir, n_files=5):
-#this function is for reading metadata files downloaded from tns server and merging
-#them together into one for later easier analysis. it receives the initial data
-#directory and the number of files in it.
-
-    data_file = "tns_search.csv"
-    df=pd.read_csv(current_real_data_dir+data_file)
-
-    for i in np.arange(1,n_files+1):
-        data_file = current_real_data_dir+"tns_search({}).csv".format(i)
-        print(data_file)
-        df2 = pd.read_csv(data_file)
-        df = pd.concat([df,df2])
-        # print(df.head())
-        print(df.shape)
-
-    print(df.keys())
-    df=df.drop_duplicates(keep="first")
-
-    df.to_csv(current_real_data_dir+"tns_search_sn_metadata.csv",index=False)
