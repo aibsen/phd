@@ -18,7 +18,7 @@ from transforms import RandomCrop,ZeroPad,RightCrop
     using 4 different NN models: FCN, ResNet, GRU, and GRU-SA """
 
 results_dir = "../../results/"
-interpolated_dataset_filename = "../../data/training/linearly_interpolated/unbalanced_dataset_m_realzp_128_3types_small.h5"
+interpolated_dataset_filename = "../../data-08-03-21/training/linearly_interpolated/unbalanced_dataset_m_realzp_128.h5"
 
 lc_length = 128
 num_epochs = 30
