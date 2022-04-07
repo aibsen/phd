@@ -13,63 +13,84 @@ import numpy as np
 class Conv1DBlock(nn.Module):
     def __init__(self, in_channels, ks=3, n_filters=128):
         super(Conv1DBlock, self).__init__()
-        self.layer_dict = nn.ModuleDict()
-        self.layer_dict['conv'] = nn.Conv1d(in_channels=in_channels,kernel_size=ks,out_channels=n_filters)
-        self.layer_dict['bn'] = nn.BatchNorm1d(n_filters)
+        self.conv = nn.Conv1d(in_channels=in_channels,kernel_size=ks,out_channels=n_filters)
+        self.bn = nn.BatchNorm1d(n_filters)
 
     def forward(self, x):
         out = x
-        out = F.relu(
-            self.layer_dict['bn'](
-                self.layer_dict['conv'](out)))
+        out = F.relu(self.bn(self.conv(out)))
         return out
 
+    def reset_parameters(self):
+        nn.init.kaiming_uniform_(self.conv.weight, mode = 'fan_in', nonlinearity = 'relu')
+        nn.init.constant_(self.conv.bias, 0)
+        self.bn.reset_parameters()
 
 class FCNN1D(nn.Module):
-    def __init__(self, params=None):
+    def __init__(self, params=None,regularize=True):
         super(FCNN1D, self).__init__()
+
         self.layer_dict = nn.ModuleDict()
         self.params = params
+        self.regularize = regularize
 
         if self.params is not None:
             self.build_module()
 
     def build_module(self):
         print("Building Fully Convolutional Network using input shape", self.params["input_shape"])
-        print(self.params)
+
         self.layer_dict['conv_block_0'] = Conv1DBlock(in_channels=self.params["input_shape"][0],ks=8,n_filters=128)
         self.layer_dict['conv_block_1'] = Conv1DBlock(in_channels=128,ks=5,n_filters=256)
         self.layer_dict['conv_block_2'] = Conv1DBlock(in_channels=256,ks=3,n_filters=128)
         
-        if self.params["global_pool"] == 'avg':
-            self.layer_dict['global_pool'] = torch.nn.AvgPool1d(2)
-        elif self.params["global_pool"] == 'max':
-            self.layer_dict['global_pool'] = torch.nn.MaxPool1d(2)
+        # if self.params["global_pool"] == 'avg':
+        #     self.global_pool = torch.nn.AvgPool1d(2)
+        # elif self.params["global_pool"] == 'max':
+        #     self.global_pool = torch.nn.MaxPool1d(2)
 
-        if self.params["regularize"]:
-            self.layer_dict['dropout'] = torch.nn.Dropout(p=0.2)
-        self.layer_dict["linear"] = nn.Linear(in_features=(self.params["input_shape"][1]-13)*64,out_features=self.params['num_output_classes'])
-    
+        if self.regularize:
+            self.dropout = torch.nn.Dropout(p=0.2)
+        self.layer_dict["linear"] = nn.Linear(in_features=128,out_features=self.params['num_output_classes'])
+
+
     def forward(self, x):
         out = x
+        print(out.shape)
         for i in range(3):
+            print("convblock_{}".format(i))
             out = self.layer_dict["conv_block_{}".format(i)](out)
-
+            print(out.shape)
+        # print("permute")
+        print(out.shape)
+        if self.regularize:
+            out = self.dropout(out)
+        print("pooling")
+        # out = self.global_pool(out)
+        if self.params["global_pool"] == 'avg':
+            out = torch.nn.AvgPool1d(out.shape[-1])(out)
+        elif self.params["global_pool"] == 'max':
+            out = torch.nn.MaxPool1d(out.shape[-1])(out)
         out = out.permute(0,2,1)
-        if self.params["regularize"]:
-            out = self.layer_dict["dropout"](out)
-        out = self.layer_dict['global_pool'](out)
+        print(out.shape)
+
+        # print(out.shape)
+        # print("tf")
         out = out.contiguous().view(out.shape[0], -1)
+        print(out.shape)
         out = self.layer_dict["linear"](out)
+        print(out.shape)
+
         return out
 
     def reset_parameters(self):
-        for item in self.layer_dict.children():
+        print("Initializig weights of FCN")
+
+        for i,item in enumerate(self.layer_dict.children()):
             try:
                 item.reset_parameters()
-            except:
-                pass
-
+            except Exception as e:
+                print(e)
 
 class ResNet1DBlock(nn.Module):
     def __init__(self, in_channels,n_filters=64,regularize=True):
@@ -81,7 +102,7 @@ class ResNet1DBlock(nn.Module):
         self.layer_dict['conv_block_2'] = Conv1DBlock(in_channels=n_filters,ks=3,n_filters=n_filters)
         self.layer_dict['expand_res_channels'] = nn.Conv1d(in_channels=in_channels, out_channels=n_filters, kernel_size =1)
         self.layer_dict['bn_res']=nn.BatchNorm1d(n_filters)
-        self.layer_dict['dropout']=nn.Dropout(p=0.2)
+        self.dropout=nn.Dropout(p=0.2)
 
     def forward(self, x):
         out = x
@@ -98,8 +119,15 @@ class ResNet1DBlock(nn.Module):
             res=self.layer_dict["bn_res"](out)
         out = F.relu(out+res)
         if self.regularize:
-            self.layer_dict["dropout"](out)
+            self.dropout(out)
         return out
+
+    def reset_parameters(self):
+        for item in self.layer_dict.children():
+            try:
+                item.reset_parameters()
+            except Exception as e:
+                print(e)
 
 
 class ResNet1D(nn.Module):
@@ -112,17 +140,17 @@ class ResNet1D(nn.Module):
 
     def build_module(self):
         print("Building ResNet using input shape", self.params["input_shape"])
-        print(self.params)
+
         in_channels=self.params["input_shape"][0]
         self.layer_dict["res_block_0"] = ResNet1DBlock(in_channels=in_channels, n_filters=64)
         self.layer_dict["res_block_1"] = ResNet1DBlock(in_channels=64, n_filters=128)
         self.layer_dict["res_block_2"] = ResNet1DBlock(in_channels=128, n_filters=128)
         if self.params["global_pool"] == "max":
-            self.layer_dict['global_pool'] = torch.nn.MaxPool1d(2)
+            self.global_pool = torch.nn.MaxPool1d(2)
         elif self.params["global_pool"] == "avg":
-            self.layer_dict['global_pool'] = torch.nn.AvgPool1d(2)
-        self.layer_dict['linear'] = nn.Linear(in_features=int(128*self.params["input_shape"][1]/2),
-            out_features=self.params['num_output_classes'])
+            self.global_pool = torch.nn.AvgPool1d(2)
+        # self.layer_dict['linear'] = nn.Linear(in_features=int(128*self.params["input_shape"][1]/2),
+            # out_features=self.params['num_output_classes'])
 
     def forward(self, x):
         out = x
@@ -130,12 +158,13 @@ class ResNet1D(nn.Module):
             out = self.layer_dict["res_block_{}".format(i)](out)
         #permute to do global pooling across filter dimention
         out = out.permute(0,2,1)
-        out = self.layer_dict['global_pool'](out)
+        out = self.global_pool(out)
         out = out.contiguous().view(out.shape[0], -1)
-        out = self.layer_dict["linear"](out)
+        # out = self.layer_dict["linear"](out)
         return out
 
     def reset_parameters(self):
+        print("Initializing weights of ResNet")
         for item in self.layer_dict.children():
             try:
                 item.reset_parameters()
