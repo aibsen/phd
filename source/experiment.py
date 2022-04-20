@@ -126,7 +126,7 @@ class Experiment(nn.Module):
         self.optimizer.step()
         predicted = F.log_softmax(out.data,dim=1)
         predicted = torch.argmax(predicted, 1)
-        loss = loss.data.cpu()
+        loss = loss.data.cpu().numpy()
         y_cpu = list(y.data.cpu().numpy())
         predicted_cpu = list(predicted.cpu().numpy())
         return loss, predicted_cpu, y_cpu
@@ -258,7 +258,9 @@ class Experiment(nn.Module):
                     pbar_train.update(1)
                     pbar_train.set_description("Epoch {} train loss: {:.4f}".format(epoch_idx,train_loss_cum/(idx+1)))
                 
+                
                 loss = train_loss_cum/n_batches
+                print(loss)
                 accuracy = accuracy_score(train_targets, train_predictions)
                 precision, recall, f1, _ = precision_recall_fscore_support(train_targets, train_predictions, average = 'macro', zero_division=0)
                 
