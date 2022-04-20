@@ -56,31 +56,18 @@ class FCNN1D(nn.Module):
 
     def forward(self, x):
         out = x
-        print(out.shape)
         for i in range(3):
-            print("convblock_{}".format(i))
             out = self.layer_dict["conv_block_{}".format(i)](out)
-            print(out.shape)
-        # print("permute")
-        print(out.shape)
         if self.regularize:
             out = self.dropout(out)
-        print("pooling")
         # out = self.global_pool(out)
         if self.params["global_pool"] == 'avg':
             out = torch.nn.AvgPool1d(out.shape[-1])(out)
         elif self.params["global_pool"] == 'max':
             out = torch.nn.MaxPool1d(out.shape[-1])(out)
         out = out.permute(0,2,1)
-        print(out.shape)
-
-        # print(out.shape)
-        # print("tf")
         out = out.contiguous().view(out.shape[0], -1)
-        print(out.shape)
         out = self.layer_dict["linear"](out)
-        print(out.shape)
-
         return out
 
     def reset_parameters(self):

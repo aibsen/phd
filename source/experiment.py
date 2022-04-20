@@ -8,11 +8,12 @@ import torch.backends.cudnn as cudnn
 import tqdm
 import os
 import numpy as np
+import pandas as pd
 import time
 from torch.utils.data import SequentialSampler
-from sklearn.metrics import precision_score, recall_score, precision_recall_fscore_support
-from utils import save_to_stats_pkl_file, load_from_stats_pkl_file, \
-    save_statistics, load_statistics, save_classification_results
+from sklearn.metrics import precision_recall_fscore_support, accuracy_score
+# from utils import save_to_stats_pkl_file, load_from_stats_pkl_file, \
+#     save_statistics, load_statistics, save_classification_results
 
 
 class Experiment(nn.Module):
@@ -27,13 +28,15 @@ class Experiment(nn.Module):
         train_sampler=None,
         val_sampler=None,
         test_sampler = None,
-        weight_decay_coefficient=0, 
+        weight_decay_coefficient=1e-03, 
         use_gpu=True, 
         continue_from_epoch=-1, 
         num_output_classes=11, 
         best_idx=0, 
         verbose=True,
-        cached_dataset=False):
+        cached_dataset=False,
+        patience=5,
+        validation_step=5):
 
         super(Experiment, self).__init__()
 
@@ -54,32 +57,28 @@ class Experiment(nn.Module):
         self.model.to(self.device)
         self.model.reset_parameters()
         self.num_output_classes = num_output_classes
+        self.patience = patience
+        self.validation_step = validation_step
 
+        self.train_data=None
+        self.val_data=None
+        self.test_data=None
+        self.starting_epoch = 0
+        
 
         if train_data:
             if train_sampler is not None:
-                # print("there's a sampler")
-                # print(len(train_data))
-                # print(train_sampler)
-                # sampler = SequentialSampler(train_data)
-                # train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, sampler=sampler)
                 train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, sampler=train_sampler)
             else:
                 train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=True)
             self.train_data = train_loader
 
-        else:
-            self.train_data = None
-            self.val_data = None
-
         if val_data:
             if val_sampler is not None:
                 val_loader = torch.utils.data.DataLoader(val_data,batch_size=batch_size,sampler=val_sampler)
             else:
-                 val_loader = torch.utils.data.DataLoader(val_data, batch_size=batch_size, shuffle=True)
+                val_loader = torch.utils.data.DataLoader(val_data, batch_size=batch_size, shuffle=True)
             self.val_data = val_loader
-        else:
-            self.val_data = None
 
         if test_data:
             if test_sampler is not None:
@@ -87,8 +86,6 @@ class Experiment(nn.Module):
             else:
                 test_loader = torch.utils.data.DataLoader(test_data,batch_size=batch_size,shuffle=True)
             self.test_data = test_loader
-        else:
-            self.test_data = None
 
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate, amsgrad=False,
                                     weight_decay=weight_decay_coefficient)
@@ -100,7 +97,6 @@ class Experiment(nn.Module):
 
         # Set best models to be at 0 since we are just starting
         self.best_val_model_idx = best_idx
-        self.best_val_model_acc = 0
         self.best_val_model_f1 = 0
 
         if not os.path.exists(self.experiment_folder):  # If experiment directory does not exist
@@ -109,32 +105,17 @@ class Experiment(nn.Module):
             os.mkdir(self.experiment_saved_models)  # create the experiment saved models directory
 
         self.num_epochs = num_epochs
+        self.break_epoch = num_epochs
         self.criterion = nn.CrossEntropyLoss().to(self.device)  # send the loss computation to the GPU
 
         if continue_from_epoch != -1:  # if continue from epoch is not -1 then
             try:
-                self.best_val_model_idx, self.best_val_model_acc, self.best_val_model_f1 = self.load_model(
-                    model_save_dir=self.experiment_saved_models, model_save_name="train_model_"+self.metric,
+                self.best_val_model_idx, self.best_val_model_f1 = self.load_model(
+                    model_save_dir=self.experiment_saved_models, model_save_name="epoch",
                     model_idx=continue_from_epoch)  # reload existing model from epoch
                 self.starting_epoch = continue_from_epoch
             except:
                 print("Did not save that epoch's model, will start from 0")
-                self.starting_epoch = 0
-        else:
-            self.starting_epoch = 0
-
-    def calculate_balance_weights(self, train_data):
-        counts = torch.zeros(self.num_output_classes)
-        labels = torch.zeros(len(train_data), dtype=torch.long)
-        for i,item in enumerate(train_data):
-            counts[item[1]] +=1 
-            labels[i] = item[1]
-
-        weights_per_class = 1/counts
-        weights = weights_per_class[labels]
-        num_samples = int(counts.min()*self.num_output_classes)
-        return weights, num_samples
-
 
     def run_train_iter(self, x, y):
         self.train()
@@ -143,33 +124,28 @@ class Experiment(nn.Module):
         loss = self.criterion(out,y)
         loss.backward()  # backpropagate
         self.optimizer.step()
-        predicted = torch.argmax(out.data, 1)
-        accuracy = np.mean(list(predicted.eq(y.data).cpu()))
+        predicted = F.log_softmax(out.data,dim=1)
+        predicted = torch.argmax(predicted, 1)
         loss = loss.data.cpu()
-        y_cpu = y.data.cpu()
-        predicted_cpu = predicted.cpu()
-        p,r,f1_score,s = precision_recall_fscore_support(y_cpu,predicted_cpu, average='weighted', labels=np.unique(predicted_cpu))
-        return loss,accuracy,f1_score,p,r
+        y_cpu = list(y.data.cpu().numpy())
+        predicted_cpu = list(predicted.cpu().numpy())
+        return loss, predicted_cpu, y_cpu
 
     def run_evaluation_iter(self, x, y):
         self.eval()  # sets the system to validation mode
         out = self.model.forward(x)  # forward the data in the model
         loss =  self.criterion(out,y)
-        predicted = torch.argmax(out.data, 1)
-        accuracy = np.mean(list(predicted.eq(y.data).cpu()))
+        predicted = F.log_softmax(out.data,dim=1)
+        predicted = torch.argmax(predicted, 1)
         loss = loss.data.cpu()
-        y_cpu = y.data.cpu()
-        predicted_cpu = predicted.cpu()
-        p,r,f1_score,s = precision_recall_fscore_support(y_cpu,predicted_cpu, average='weighted', labels=np.unique(predicted_cpu))
-        return loss, accuracy,f1_score,p,r,out.data
+        y_cpu = list(y.data.cpu().numpy())
+        predicted_cpu = list(predicted.cpu().numpy())
+        return loss, predicted_cpu, y_cpu
 
     def save_model(self, model_save_dir, model_save_name, model_idx, best_validation_model_idx):
-                #    best_validation_model_acc, best_validation_model_f1):
         state = dict()
         state['network'] = self.model.state_dict()  # save network parameter and other variables.
         state['best_val_model_idx'] = best_validation_model_idx  # save current best val idx
-        # state['best_val_model_acc'] = best_validation_model_acc  # save current best val acc
-        # state['best_val_model_f1'] = best_validation_model_f1  # save current best val acc
         torch.save(state, f=os.path.join(model_save_dir, "{}_{}".format(model_save_name, str(
             model_idx))))
 
@@ -181,132 +157,185 @@ class Experiment(nn.Module):
         self.model.load_state_dict(state_dict=state['network'])
         return state['best_val_model_idx']#, state['best_val_model_acc'], state['best_val_model_f1']
 
-    def run_test_phase(self, data, results_filename, summary_filename):
-        #getting evaluation metrics for best epoch model only
-        self.load_model(model_save_dir=self.experiment_saved_models, model_idx=self.best_val_model_idx,model_save_name="train_model_"+self.metric)
-        metrics = {"acc": [], "loss": [], "f1": [],"precision":[],"recall":[]}
-        soft_results = None
-        actual_tags = None
-        id_events = None
+    def save_statistics(self, experiment_log_dir, filename, stats_dict):
+        df = pd.DataFrame(stats_dict)
+        path = os.path.join(experiment_log_dir, filename)
+        df.to_csv(path,sep=',',index=False)
 
-        # if self.verbose:
-        #     pbar = tqdm.tqdm(total=len(data))
+    def run_test_phase(self, data, model_idx, experiment_log_dir, model_name="final_model"):
+
+        self.load_model(model_save_dir=experiment_log_dir, model_save_name=model_name,model_idx=model_idx)
+
+        test_targets=[]
+        test_predictions=[]
+        test_loss_cum=0
+        test_ids=[]
+
         with tqdm.tqdm(total=len(data)) as pbar:
             for x, y, ids in data:
-                loss, accuracy,f1,p,r,results = self.run_evaluation_iter(x=x,y=y)
-                metrics["loss"].append(loss)
-                metrics["acc"].append(accuracy)
-                metrics["f1"].append(f1)
-                metrics["precision"].append(p)
-                metrics['recall'].append(r)
-                results = F.softmax(results,dim=1)
-
-                if soft_results is None:
-                    soft_results = results
-                    actual_tags = y
-                    id_events =ids
-                else :
-                    soft_results = torch.cat((soft_results, results),0)
-                    actual_tags = torch.cat((actual_tags, y),0)
-                    id_events = torch.cat((id_events,ids),0)
-                # if self.verbose:
+                loss, pred, targets = self.run_evaluation_iter(x=x,y=y)
+                test_ids+=list(ids.cpu().numpy())
+                test_loss_cum += loss
+                test_predictions += pred
+                test_targets += targets
                 pbar.update(1)
 
-        total_metrics = {key: [np.mean(value)] for key, value in metrics.items()}  # save vaidation set metrics
-        if self.verbose:
-            [print("    ",key,": ",str(value)) for key, value in total_metrics.items()]
+        loss = test_loss_cum/len(data)
+        accuracy = accuracy_score(test_targets, test_predictions)
+        precision, recall, f1, _ = precision_recall_fscore_support(test_targets, test_predictions, average = 'macro', zero_division=0)
 
-        save_classification_results(experiment_log_dir=self.experiment_logs, filename=results_filename,results=soft_results,
-            ids=id_events,tags=actual_tags,n_classes=self.num_output_classes)
-        save_statistics(experiment_log_dir=self.experiment_logs, filename=summary_filename,stats_dict=total_metrics, current_epoch=0)
+        metrics={"test_acc": [accuracy], "test_loss": [loss], "test_f1": [f1],"test_precision":[precision],"test_recall":[recall]}
+        results = pd.DataFrame({'ids':test_ids,'targets':test_targets,'predictions':test_predictions }) 
 
-    def run_train_phase(self):
-        total_losses = {"train_acc": [], "train_loss": [], "train_f1":[],"train_precision":[],"train_recall":[], "val_acc": [],
-                        "val_loss": [], "val_f1":[], "val_precision":[],"val_recall":[]}  # initialize a dict to keep the per-epoch metrics
-        for i, epoch_idx in enumerate(range(self.starting_epoch, self.num_epochs)):
+        self.save_statistics(experiment_log_dir=experiment_log_dir,filename='test_results.csv',stats_dict=results)
+        self.save_statistics(experiment_log_dir=experiment_log_dir, filename="test_summary.csv",stats_dict=metrics)
+
+    def run_final_train_phase(self, data_loaders, experiment_log_dir, model_name="final_model"):
+                
+        self.model.reset_parameters()
+        train_stats = {"epoch": [],"train_acc": [], "train_loss": [], "train_f1":[],"train_precision":[],"train_recall":[]}  # initialize a dict to keep the per-epoch metrics
+
+        total_len = sum([len(data) for data in data_loaders])
+        for i, epoch_idx in enumerate(range(self.starting_epoch, self.break_epoch)):
+            
             epoch_start_time = time.time()
-            current_epoch_metrics = {"train_acc": [], "train_loss": [], "train_f1":[], "train_precision":[],"train_recall":[],
-            "val_acc": [], "val_loss": [],"val_f1":[],"val_precision":[],"val_recall":[]}
 
-            # if self.verbose:
-            #     pbar_train = tqdm.tqdm(total=len(self.train_data))
-            #     pbar_val = tqdm.tqdm(total=len(self.val_data))
+            with tqdm.tqdm(total=total_len) as pbar_train:
+
+                train_loss_cum = 0 
+                train_predictions = []
+                train_targets = []
+
+                for data in data_loaders:
+                    for idx, (x, y,ids) in enumerate(data):
+                        loss, pred, targets = self.run_train_iter(x=x, y=y)
+                        train_loss_cum += loss
+                        train_predictions += pred
+                        train_targets += targets
+                        pbar_train.update(1)
+                        pbar_train.set_description("Epoch {} train loss: {:.4f}".format(epoch_idx,train_loss_cum/(idx+1)))
+                
+                loss = train_loss_cum/total_len
+                accuracy = accuracy_score(train_targets, train_predictions)
+                precision, recall, f1, _ = precision_recall_fscore_support(train_targets, train_predictions, average = 'macro', zero_division=0)
+                
+                train_stats['train_acc'].append(accuracy)
+                train_stats['train_loss'].append(loss)
+                train_stats['train_f1'].append(f1)
+                train_stats['train_recall'].append(recall)
+                train_stats['train_precision'].append(precision)
+                train_stats['epoch'].append(epoch_idx)
+            
+            self.save_statistics(experiment_log_dir=experiment_log_dir, filename='final_training_summary.csv',
+                stats_dict=train_stats)  # save statistics
+            self.save_model(model_save_dir=experiment_log_dir,
+                        model_save_name=model_name, model_idx=self.break_epoch,best_validation_model_idx=self.break_epoch)    
+        
+    def run_train_phase(self):
+        train_stats = {"epoch": [],"train_acc": [], "train_loss": [], "train_f1":[],"train_precision":[],"train_recall":[]}  # initialize a dict to keep the per-epoch metrics
+        val_stats = {"epoch": [],"val_acc": [],"val_loss": [], "val_f1":[], "val_precision":[],"val_recall":[]}
+        
+        strike = 0
+        step_count = 0
+
+        for i, epoch_idx in enumerate(range(self.starting_epoch, self.num_epochs)):
+            
+            epoch_start_time = time.time()
+            step_count+=1
+
             with tqdm.tqdm(total=len(self.train_data)) as pbar_train:
-                # print("size of train data:"+str(len(self.train_data)))
+
+                train_loss_cum = 0 
+                train_predictions = []
+                train_targets = []
+                n_batches = len(self.train_data)
+
                 for idx, (x, y,ids) in enumerate(self.train_data):
-                    loss, accuracy,f1, p, r = self.run_train_iter(x=x, y=y)
-                    current_epoch_metrics["train_loss"].append(loss)
-                    current_epoch_metrics["train_acc"].append(accuracy)
-                    current_epoch_metrics["train_f1"].append(f1)
-                    current_epoch_metrics["train_precision"].append(p)
-                    current_epoch_metrics['train_recall'].append(r)
-                    # if self.verbose:
+                    loss, pred, targets = self.run_train_iter(x=x, y=y)
+                    train_loss_cum += loss
+                    train_predictions += pred
+                    train_targets += targets
                     pbar_train.update(1)
-                # pbar_train.set_description("loss: {:.4f}, accuracy: {:.4f}, f1_score: {:.4f}".format(loss, accuracy, f1))
+                    pbar_train.set_description("Epoch {} train loss: {:.4f}".format(epoch_idx,train_loss_cum/(idx+1)))
+                
+                loss = train_loss_cum/n_batches
+                accuracy = accuracy_score(train_targets, train_predictions)
+                precision, recall, f1, _ = precision_recall_fscore_support(train_targets, train_predictions, average = 'macro', zero_division=0)
+                
+                train_stats['train_acc'].append(accuracy)
+                train_stats['train_loss'].append(loss)
+                train_stats['train_f1'].append(f1)
+                train_stats['train_recall'].append(recall)
+                train_stats['train_precision'].append(precision)
+                train_stats['epoch'].append(epoch_idx)
+            
 
-            with tqdm.tqdm(total=len(self.val_data)) as pbar_val:
-                for x, y,ids in self.val_data:
-                    loss, accuracy,f1,p,r,_ = self.run_evaluation_iter(x=x, y=y)
-                    current_epoch_metrics["val_loss"].append(loss)
-                    current_epoch_metrics["val_acc"].append(accuracy)
-                    current_epoch_metrics["val_f1"].append(f1)
-                    current_epoch_metrics["val_precision"].append(p)
-                    current_epoch_metrics['val_recall'].append(r)
-                    # if self.verbose:
-                    pbar_val.update(1)
-                # pbar_val.set_description("loss: {:.4f}, accuracy: {:.4f}, f1_score: {:.4f}".format(loss, accuracy,f1))
+            if step_count == self.validation_step:
+                step_count = 0
+                with tqdm.tqdm(total=len(self.val_data)) as pbar_val:
 
-            if self.metric == "accuracy":
-                val_mean_accuracy = np.mean(current_epoch_metrics['val_acc'])
-                if val_mean_accuracy > self.best_val_model_acc: #FIX THIS
-                # if val_mean_accuracy > self.best_val_model_idx:
-                    self.best_val_model_acc = val_mean_accuracy
+                    val_loss_cum = 0 
+                    val_predictions = []
+                    val_targets = []
+                    n_batches = len(self.val_data)
+
+                    for idx, (x, y, ids) in enumerate(self.val_data):
+                        loss, pred, targets = self.run_evaluation_iter(x=x, y=y)
+                        val_loss_cum += loss
+                        val_predictions += pred
+                        val_targets += targets
+                        pbar_val.update(1)
+                        pbar_val.set_description("Epoch {}   val loss: {:.4f}".format(epoch_idx,val_loss_cum/(idx+1)))
+
+                    loss = val_loss_cum/n_batches
+                    accuracy = accuracy_score(val_targets, val_predictions)
+                    precision, recall, f1, _ = precision_recall_fscore_support(val_targets, val_predictions, average = 'macro', zero_division=0)
+                    
+                    val_stats['val_acc'].append(accuracy)
+                    val_stats['val_loss'].append(loss)
+                    val_stats['val_f1'].append(f1)
+                    val_stats['val_recall'].append(recall)
+                    val_stats['val_precision'].append(precision)
+                    val_stats['epoch'].append(epoch_idx)
+
+                #if the f1-score of the current epoch for the validation set is better than previous epochs
+                if f1 > self.best_val_model_f1:
+                    self.best_val_model_f1 = f1
                     self.best_val_model_idx = epoch_idx
-
-            elif self.metric == "f1_score":
-                val_mean_f1 = np.mean(current_epoch_metrics['val_f1'])
-                if val_mean_f1 > self.best_val_model_f1:
-                # if val_mean_f1 > self.best_val_model_idx:
-                    self.best_val_model_f1 = val_mean_f1
-                    self.best_val_model_idx = epoch_idx
-
-            self.save_model(model_save_dir=self.experiment_saved_models,
-                model_save_name="train_model_"+self.metric, model_idx=epoch_idx,
-                best_validation_model_idx=self.best_val_model_idx,
-                # best_validation_model_acc=self.best_val_model_acc,
-                # best_validation_model_f1=self.best_val_model_f1
-                )
-
-            for key, value in current_epoch_metrics.items():
-
-                total_losses[key].append(np.mean(value))  # get mean of all metrics of current epoch
-            save_statistics(experiment_log_dir=self.experiment_logs, filename='summary.csv',
-                            stats_dict=total_losses, current_epoch=i)  # save statistics
+                    self.save_model(model_save_dir=self.experiment_saved_models,
+                        model_save_name="epoch", model_idx=epoch_idx,best_validation_model_idx=self.best_val_model_idx)
+                    self.break_epoch = epoch_idx
+                    strike = 0
+                else:
+                    strike+=1
 
             if self.verbose:
-                out_string = "\n    ".join(["{}_{:.4f}".format(key, np.mean(value)) for key, value in current_epoch_metrics.items()])
-
                 epoch_elapsed_time = time.time() - epoch_start_time  # calculate time taken for epoch
                 epoch_elapsed_time = "{:.4f}".format(epoch_elapsed_time)
-                print("Epoch {}:\n".format(epoch_idx), out_string, "\n epoch time", epoch_elapsed_time, "seconds")
+                print("time elapsed", epoch_elapsed_time, "seconds")
 
-    def run_experiment(self,test_results="test_results.csv", test_summary="test_summary.csv"):
+            if strike == self.patience:
+                print("Early stop, model is overfitting")
+                break
+
+        #save statistics at the end only
+        self.save_statistics(experiment_log_dir=self.experiment_logs, filename='training_summary.csv',
+                stats_dict=train_stats)  # save statistics    
+        self.save_statistics(experiment_log_dir=self.experiment_logs, filename='validation_summary.csv',
+                stats_dict=val_stats)  # save statistics    
+
+    def run_experiment(self):
         """
         Runs experiment train and evaluation iterations, saving the model and best val model and val model accuracy after each epoch
         :return: The summary current_epoch_losses from starting epoch to total_epochs.
         """
         if self.train_data and self.val_data:
-            self.run_train_phase()
             if self.verbose:
                 print("Starting training phase")
-        #getting evaluation metrics for best epoch model only
-            self.load_model(model_save_dir=self.experiment_saved_models, model_idx=self.best_val_model_idx, model_save_name="train_model_"+self.metric)
-            if self.verbose:
-                print("Starting test phase")
-                print("Generating val set evaluation metrics")
-            self.run_test_phase(self.val_data, "validation_results.csv", "validation_summary.csv")
+            self.run_train_phase()
+            self.run_final_train_phase([self.train_data,self.val_data],self.experiment_logs)
 
         if self.test_data:
             if self.verbose:
-                print("Generating test set evaluation metrics")
-            self.run_test_phase(self.test_data, test_results, test_summary)
+                print("Starting test phase")
+            self.run_test_phase(self.test_data, self.break_epoch,self.experiment_logs)
