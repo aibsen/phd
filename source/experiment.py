@@ -31,12 +31,12 @@ class Experiment(nn.Module):
         weight_decay_coefficient=1e-03, 
         use_gpu=True, 
         continue_from_epoch=-1, 
-        num_output_classes=11, 
         best_idx=0, 
         verbose=True,
         cached_dataset=False,
         patience=5,
-        validation_step=5):
+        validation_step=5,
+        class_weights = None):
 
         super(Experiment, self).__init__()
 
@@ -56,7 +56,6 @@ class Experiment(nn.Module):
         self.model = network_model
         self.model.to(self.device)
         self.model.reset_parameters()
-        self.num_output_classes = num_output_classes
         self.patience = patience
         self.validation_step = validation_step
 
@@ -106,7 +105,9 @@ class Experiment(nn.Module):
 
         self.num_epochs = num_epochs
         self.break_epoch = num_epochs
-        self.criterion = nn.CrossEntropyLoss().to(self.device)  # send the loss computation to the GPU
+        if class_weights:
+            class_weights = torch.FloatTensor(class_weights).cuda()
+        self.criterion = nn.CrossEntropyLoss(weight=class_weights).to(self.device)  # send the loss computation to the GPU
 
         if continue_from_epoch != -1:  # if continue from epoch is not -1 then
             try:
@@ -137,7 +138,7 @@ class Experiment(nn.Module):
         loss =  self.criterion(out,y)
         predicted = F.log_softmax(out.data,dim=1)
         predicted = torch.argmax(predicted, 1)
-        loss = loss.data.cpu()
+        loss = loss.data.cpu().numpy()
         y_cpu = list(y.data.cpu().numpy())
         predicted_cpu = list(predicted.cpu().numpy())
         return loss, predicted_cpu, y_cpu

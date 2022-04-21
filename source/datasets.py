@@ -5,7 +5,7 @@ import h5py
 import random
 
 class LCs(Dataset):
-    def __init__(self, lc_length, dataset_h5,n_channels=12,transform=None):
+    def __init__(self, lc_length, dataset_h5,n_channels=12,transform=None, n_classes=14):
 
         self.lc_length = lc_length
         self.dataset_h5 = dataset_h5
@@ -17,6 +17,7 @@ class LCs(Dataset):
         self.length = None
         self.n_channels = n_channels
         self.targets = None
+        self.n_classes=n_classes
 
         try:
             with h5py.File(self.dataset_h5,'r') as f:
@@ -54,15 +55,8 @@ class LCs(Dataset):
         except Exception as e:
             print(e)
 
-    def get_samples_per_class(self,n_classes):
-        if self.Y is None:
-            self.load_data_into_memory()
-        self.n_classes = n_classes
-        counts = torch.zeros(n_classes)
-        for i in np.arange(n_classes):
-            idx = torch.where(self.Y == i)[0]
-            counts[i] = len(self.Y[idx])
-        return counts
+    def get_samples_per_class(self):
+        return [self.targets.count(i) for i in range(self.n_classes)]
 
     def get_items(self,idxs):
         X = self.X[idxs]
