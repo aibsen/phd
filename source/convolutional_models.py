@@ -27,9 +27,10 @@ class Conv1DBlock(nn.Module):
         self.bn.reset_parameters()
 
 class FCNN1D(nn.Module):
-    def __init__(self, params=None,regularize=True):
+    def __init__(self, params=None,regularize=True, seed=1772670):
         super(FCNN1D, self).__init__()
 
+        self.seed = seed
         self.layer_dict = nn.ModuleDict()
         self.params = params
         self.regularize = regularize
@@ -38,6 +39,7 @@ class FCNN1D(nn.Module):
             self.build_module()
 
     def build_module(self):
+        print("")
         print("Building Fully Convolutional Network using input shape", self.params["input_shape"])
 
         self.layer_dict['conv_block_0'] = Conv1DBlock(in_channels=self.params["input_shape"][0],ks=8,n_filters=128)
@@ -71,8 +73,8 @@ class FCNN1D(nn.Module):
         return out
 
     def reset_parameters(self):
-        print("Initializig weights of FCN")
-
+        # print("Initializig weights of FCN")
+        torch.cuda.manual_seed(self.seed)
         for i,item in enumerate(self.layer_dict.children()):
             try:
                 item.reset_parameters()

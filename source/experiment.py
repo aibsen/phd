@@ -64,7 +64,6 @@ class Experiment(nn.Module):
         self.test_data=None
         self.starting_epoch = 0
         
-
         if train_data:
             if train_sampler is not None:
                 train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, sampler=train_sampler)
@@ -152,8 +151,6 @@ class Experiment(nn.Module):
 
     def load_model(self, model_save_dir, model_save_name, model_idx):
         filename = os.path.join(model_save_dir, "{}_{}".format(model_save_name, str(model_idx)))
-        if self.verbose:
-            print(filename)
         state = torch.load(f=filename)
         self.model.load_state_dict(state_dict=state['network'])
         return state['best_val_model_idx']#, state['best_val_model_acc'], state['best_val_model_f1']
@@ -164,7 +161,7 @@ class Experiment(nn.Module):
         df.to_csv(path,sep=',',index=False)
 
     def run_test_phase(self, data, model_idx, experiment_log_dir, model_name="final_model"):
-
+        start_time = time.time()
         self.load_model(model_save_dir=experiment_log_dir, model_save_name=model_name,model_idx=model_idx)
 
         test_targets=[]
@@ -173,13 +170,15 @@ class Experiment(nn.Module):
         test_ids=[]
 
         with tqdm.tqdm(total=len(data)) as pbar:
-            for x, y, ids in data:
+            for i,(x, y, ids) in enumerate(data):
                 loss, pred, targets = self.run_evaluation_iter(x=x,y=y)
                 test_ids+=list(ids.cpu().numpy())
                 test_loss_cum += loss
                 test_predictions += pred
                 test_targets += targets
                 pbar.update(1)
+                elapsed_time = time.time() - start_time 
+                pbar.set_description("Test loss: {:.3f}        , ET {:.2f}s".format(test_loss_cum/(i+1),elapsed_time))
 
         loss = test_loss_cum/len(data)
         accuracy = accuracy_score(test_targets, test_predictions)
@@ -192,17 +191,17 @@ class Experiment(nn.Module):
         self.save_statistics(experiment_log_dir=experiment_log_dir, filename="test_summary.csv",stats_dict=metrics)
 
     def run_final_train_phase(self, data_loaders, experiment_log_dir, model_name="final_model"):
+        start_time = time.time()
                 
         self.model.reset_parameters()
         train_stats = {"epoch": [],"train_acc": [], "train_loss": [], "train_f1":[],"train_precision":[],"train_recall":[]}  # initialize a dict to keep the per-epoch metrics
 
-        total_len = sum([len(data) for data in data_loaders])
-        for i, epoch_idx in enumerate(range(self.starting_epoch, self.break_epoch)):
-            
-            epoch_start_time = time.time()
+        n_batches = sum([len(data) for data in data_loaders])
+        with tqdm.tqdm(total=self.break_epoch) as pbar_train:
 
-            with tqdm.tqdm(total=total_len) as pbar_train:
-
+            for i, epoch_idx in enumerate(range(self.starting_epoch, self.break_epoch)):
+                
+                epoch_start_time = time.time()
                 train_loss_cum = 0 
                 train_predictions = []
                 train_targets = []
@@ -213,10 +212,9 @@ class Experiment(nn.Module):
                         train_loss_cum += loss
                         train_predictions += pred
                         train_targets += targets
-                        pbar_train.update(1)
-                        pbar_train.set_description("Epoch {} train loss: {:.4f}".format(epoch_idx,train_loss_cum/(idx+1)))
+                        
                 
-                loss = train_loss_cum/total_len
+                loss = train_loss_cum/n_batches
                 accuracy = accuracy_score(train_targets, train_predictions)
                 precision, recall, f1, _ = precision_recall_fscore_support(train_targets, train_predictions, average = 'macro', zero_division=0)
                 
@@ -226,26 +224,31 @@ class Experiment(nn.Module):
                 train_stats['train_recall'].append(recall)
                 train_stats['train_precision'].append(precision)
                 train_stats['epoch'].append(epoch_idx)
-            
-            self.save_statistics(experiment_log_dir=experiment_log_dir, filename='final_training_summary.csv',
-                stats_dict=train_stats)  # save statistics
-            self.save_model(model_save_dir=experiment_log_dir,
-                        model_save_name=model_name, model_idx=self.break_epoch,best_validation_model_idx=self.break_epoch)    
+                pbar_train.update(1)
+
+                elapsed_time = time.time() - start_time  
+                pbar_train.set_description("Train loss: {:.3f}       , ET {:.2F}s".format(loss,elapsed_time))
+                
+                
+        self.save_statistics(experiment_log_dir=experiment_log_dir, filename='final_training_summary.csv',
+            stats_dict=train_stats)  # save statistics
+        self.save_model(model_save_dir=experiment_log_dir,
+                    model_save_name=model_name, model_idx=self.break_epoch,best_validation_model_idx=self.break_epoch)    
         
     def run_train_phase(self):
+        start_time = time.time()
         train_stats = {"epoch": [],"train_acc": [], "train_loss": [], "train_f1":[],"train_precision":[],"train_recall":[]}  # initialize a dict to keep the per-epoch metrics
         val_stats = {"epoch": [],"val_acc": [],"val_loss": [], "val_f1":[], "val_precision":[],"val_recall":[]}
         
         strike = 0
         step_count = 0
+        val_loss = np.Inf #initial value
 
-        for i, epoch_idx in enumerate(range(self.starting_epoch, self.num_epochs)):
-            
-            epoch_start_time = time.time()
-            step_count+=1
+        with tqdm.tqdm(total=self.num_epochs) as pbar_train:
 
-            with tqdm.tqdm(total=len(self.train_data)) as pbar_train:
-
+            for i, epoch_idx in enumerate(range(self.starting_epoch, self.num_epochs)):
+                
+                step_count+=1
                 train_loss_cum = 0 
                 train_predictions = []
                 train_targets = []
@@ -255,27 +258,22 @@ class Experiment(nn.Module):
                     loss, pred, targets = self.run_train_iter(x=x, y=y)
                     train_loss_cum += loss
                     train_predictions += pred
-                    train_targets += targets
-                    pbar_train.update(1)
-                    pbar_train.set_description("Epoch {} train loss: {:.4f}".format(epoch_idx,train_loss_cum/(idx+1)))
+                    train_targets += targets                
                 
-                
-                loss = train_loss_cum/n_batches
-                print(loss)
+                train_loss = train_loss_cum/n_batches
                 accuracy = accuracy_score(train_targets, train_predictions)
                 precision, recall, f1, _ = precision_recall_fscore_support(train_targets, train_predictions, average = 'macro', zero_division=0)
                 
                 train_stats['train_acc'].append(accuracy)
-                train_stats['train_loss'].append(loss)
+                train_stats['train_loss'].append(train_loss)
                 train_stats['train_f1'].append(f1)
                 train_stats['train_recall'].append(recall)
                 train_stats['train_precision'].append(precision)
                 train_stats['epoch'].append(epoch_idx)
             
-
-            if step_count == self.validation_step:
-                step_count = 0
-                with tqdm.tqdm(total=len(self.val_data)) as pbar_val:
+                if step_count == self.validation_step:
+                    step_count = 0
+                    # with tqdm.tqdm(total=len(self.val_data)) as pbar_val:
 
                     val_loss_cum = 0 
                     val_predictions = []
@@ -287,15 +285,14 @@ class Experiment(nn.Module):
                         val_loss_cum += loss
                         val_predictions += pred
                         val_targets += targets
-                        pbar_val.update(1)
-                        pbar_val.set_description("Epoch {}   val loss: {:.4f}".format(epoch_idx,val_loss_cum/(idx+1)))
+                        
 
-                    loss = val_loss_cum/n_batches
+                    val_loss = val_loss_cum/n_batches
                     accuracy = accuracy_score(val_targets, val_predictions)
                     precision, recall, f1, _ = precision_recall_fscore_support(val_targets, val_predictions, average = 'macro', zero_division=0)
                     
                     val_stats['val_acc'].append(accuracy)
-                    val_stats['val_loss'].append(loss)
+                    val_stats['val_loss'].append(val_loss)
                     val_stats['val_f1'].append(f1)
                     val_stats['val_recall'].append(recall)
                     val_stats['val_precision'].append(precision)
@@ -312,14 +309,13 @@ class Experiment(nn.Module):
                 else:
                     strike+=1
 
-            if self.verbose:
-                epoch_elapsed_time = time.time() - epoch_start_time  # calculate time taken for epoch
-                epoch_elapsed_time = "{:.4f}".format(epoch_elapsed_time)
-                print("time elapsed", epoch_elapsed_time, "seconds")
+                pbar_train.update(1)
+                elapsed_time = time.time() - start_time 
+                pbar_train.set_description("Tr/Val loss: {:.3f}/{:.3f}, ET {:.2f}s".format(train_loss,val_loss,elapsed_time))
 
-            if strike == self.patience:
-                print("Early stop, model is overfitting")
-                break
+                if strike == self.patience:
+                    print("Early stop, model is overfitting")
+                    break
 
         #save statistics at the end only
         self.save_statistics(experiment_log_dir=self.experiment_logs, filename='training_summary.csv',
@@ -333,12 +329,18 @@ class Experiment(nn.Module):
         :return: The summary current_epoch_losses from starting epoch to total_epochs.
         """
         if self.train_data and self.val_data:
-            if self.verbose:
-                print("Starting training phase")
+            print("")
+            print("Starting training phase")
+            print("")
             self.run_train_phase()
+            print("")
+            print("Starting final training phase")
+            print("")
             self.run_final_train_phase([self.train_data,self.val_data],self.experiment_logs)
 
         if self.test_data:
             if self.verbose:
+                print("")
                 print("Starting test phase")
+                print("")
             self.run_test_phase(self.test_data, self.break_epoch,self.experiment_logs)
