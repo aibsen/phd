@@ -69,3 +69,16 @@ class RandomCropsZeroPad(object):
             padding = torch.nn.ConstantPad1d((0,zeros),0)
             X=padding(X)
         return X,Y,obid
+
+
+class CastClass(object):
+
+    def __init__(initial_class,final_class):
+        self.initial_class = initial_class
+        self.final_class = final_class
+
+    def __call__(self,sample):
+        X,Y,obid=sample
+        if Y == self.initial_class:
+            Y=self.final_class
+        return X,Y,obid

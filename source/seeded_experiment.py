@@ -79,7 +79,8 @@ class SeededExperiment(nn.Module):
                 self.train_data,
                 self.test_data,
                 self.verbose,
-                k=self.k)
+                k=self.k,
+                seed=seed)
             experiment.run_experiment(test_results,test_summary)
 
         if self.train_data and self.test_data:

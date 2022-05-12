@@ -43,7 +43,7 @@ def pkl_to_df(pkl_filename, first_id = 0):
 #receives dataframe with lightcurves of a type
 #returns a series? with a tag for all of the ids
 def df_tags(df_sn, t):
-    print(len(df_sn))
+    # print(len(df_sn))
     sn_ids = df_sn.id.unique()
     df_sn_tags = pd.DataFrame(data=sn_ids, columns = ["id"])
     df_sn_tags.loc[:,"type"] = t
@@ -53,21 +53,21 @@ def create_interpolated_vectors(data, tags, length, dtype='sim', n_channels=2):
     obj_ids = tags.id.unique()
     data_cp = data.copy()
     # if dtype == 'sim':
-    data_cp['ob_p']=data.id*10+data.band
+    # data_cp['ob_p']=data.id*10+data.band
     # elif dtype == 'real':
-    #     data_cp['ob_p']=data.id+data.band.apply(lambda band: str(band))
+    data_cp['ob_p']=data.id+data.band.apply(lambda band: str(band))
 
     #sanity check
-    print("there are",data_cp.id.unique().size, "objects")
-    print("there are",data_cp.ob_p.unique().size, "lightcurves")
-    print("is the n_lcs twice n_objs?",data_cp.id.unique().size*2==data_cp.ob_p.unique().size)
+    # print("there are",data_cp.id.unique().size, "objects")
+    # print("there are",data_cp.ob_p.unique().size, "lightcurves")
+    # print("is the n_lcs twice n_objs?",data_cp.id.unique().size*2==data_cp.ob_p.unique().size)
 
     #get dataframe with min and max mjd values per each object id
     group_by_mjd = data_cp.groupby(['id'])['time'].agg(['min', 'max']).rename(columns = lambda x : 'time_' + x).reset_index()
     merged = pd.merge(data_cp, group_by_mjd, how = 'left', on = 'id')
 
     #sanity check
-    print("do I still have the same nobjs",merged.id.unique().size == data_cp.id.unique().size)
+    # print("do I still have the same nobjs",merged.id.unique().size == data_cp.id.unique().size)
 
     #scale mjd according to max mjd, min mjd and the desired length of the light curve (128)
     merged['scaled_time'] = (length - 1) * (merged['time'] - merged['time_min'])/(merged['time_max']-merged['time_min'])
@@ -75,12 +75,12 @@ def create_interpolated_vectors(data, tags, length, dtype='sim', n_channels=2):
     merged['cc'] = merged.groupby(['ob_p'])['count'].cumcount()
     merged=merged.sort_values(['id','time'])
     #sanity check
-    print("still?",merged.id.unique().size==data_cp.id.unique().size)
+    # print("still?",merged.id.unique().size==data_cp.id.unique().size)
 
     #reshape df so that for each row there's one lightcurve (2 rows per obj) and each column is a point of it
     # there is two main columns also, for flux and for mjd
     unstack = merged[['ob_p', 'scaled_time', 'flux', 'cc']].set_index(['ob_p', 'cc']).unstack()
-    print("still when unstacking?",unstack.shape[0]== data_cp.id.unique().size*2)
+    # print("still when unstacking?",unstack.shape[0]== data_cp.id.unique().size*2)
     #transform above info into numpy arrays
     time_uns = unstack['scaled_time'].values[..., np.newaxis]
     flux_uns = unstack['flux'].values[..., np.newaxis]
@@ -123,17 +123,15 @@ def create_interpolated_vectors_plasticc(data, tags, length, dtype='sim', n_chan
     data_cp = data.copy()
     data_cp['ob_p']=data.object_id*10+data.passband
 
-    #sanity check
-    print("there are",data_cp.object_id.unique().size, "objects")
-    print("there are",data_cp.ob_p.unique().size, "lightcurves")
-    print("is the n_lcs 6x n_objs?",data_cp.object_id.unique().size*6==data_cp.ob_p.unique().size)
+    #sanity check, 6 lcs per object
+    assert(data_cp.object_id.unique().size*6==data_cp.ob_p.unique().size)
 
     #get dataframe with min and max mjd values per each object id
     group_by_mjd = data_cp.groupby(['object_id'])['mjd'].agg(['min', 'max']).rename(columns = lambda x : 'time_' + x).reset_index()
     merged = pd.merge(data_cp, group_by_mjd, how = 'left', on = 'object_id')
 
-    #sanity check
-    print("do I still have the same nobjs",merged.object_id.unique().size == data_cp.object_id.unique().size)
+    #sanity check, still same number of objects
+    assert(merged.object_id.unique().size == data_cp.object_id.unique().size)
 
     #scale mjd according to max mjd, min mjd and the desired length of the light curve (128)
     merged['scaled_time'] = (length - 1) * (merged['mjd'] - merged['time_min'])/(merged['time_max']-merged['time_min'])
@@ -141,12 +139,13 @@ def create_interpolated_vectors_plasticc(data, tags, length, dtype='sim', n_chan
     merged['cc'] = merged.groupby(['ob_p'])['count'].cumcount()
     merged=merged.sort_values(['object_id','mjd'])
     #sanity check
-    print("still?",merged.object_id.unique().size==data_cp.object_id.unique().size)
+    assert(merged.object_id.unique().size==data_cp.object_id.unique().size)
 
     #reshape df so that for each row there's one lightcurve (6 rows per obj) and each column is a point of it
     # there is two main columns also, for flux and for mjd
     unstack = merged[['ob_p', 'scaled_time', 'flux', 'cc']].set_index(['ob_p', 'cc']).unstack()
-    print("still when unstacking?",unstack.shape[0]== data_cp.object_id.unique().size*6)
+    #sanity check
+    assert(unstack.shape[0]== data_cp.object_id.unique().size*6)
     #transform above info into numpy arrays
     time_uns = unstack['scaled_time'].values[..., np.newaxis]
     flux_uns = unstack['flux'].values[..., np.newaxis]
@@ -181,17 +180,34 @@ def create_interpolated_vectors_plasticc(data, tags, length, dtype='sim', n_chan
     return vectors, obj_ids, tags.true_target.values
 
 
+def append_vectors(dataset,outputFile):
+    with h5py.File(outputFile, 'a') as hf:
+        X=dataset["X"]
+        hf["X"].resize((hf["X"].shape[0] + X.shape[0]), axis = 0)
+        hf["X"][-X.shape[0]:] = X
+
+        ids = dataset["ids"]
+        hf["ids"].resize((hf["ids"].shape[0] + ids.shape[0]), axis = 0)
+        hf["ids"][-ids.shape[0]:] = ids
+
+        Y=dataset["Y"]
+        hf["Y"].resize((hf["Y"].shape[0] + Y.shape[0]), axis = 0)
+        hf["Y"][-Y.shape[0]:] = Y
+        hf.close()
+
 
 
 def save_vectors(dataset, outputFile):
     hf=h5py.File(outputFile,'w')
+
     print("writing X")
-    hf.create_dataset('X',data=dataset['X'])
+    hf.create_dataset('X',data=dataset['X'],compression="gzip", chunks=True, maxshape=(None,None,None,))
+
     print("writing ids")
-    print(dataset['ids'])
-    hf.create_dataset('ids',data=dataset['ids'],dtype='int64')
+    hf.create_dataset('ids',data=dataset['ids'],dtype='int64',compression="gzip", chunks=True, maxshape=(None,))
+    
     print("writing Y")
-    hf.create_dataset('Y',data=dataset['Y'])
+    hf.create_dataset('Y',data=dataset['Y'],compression="gzip", chunks=True, maxshape=(None,))
     hf.close()
 
 def flux_to_abmag(f,zp=30):
@@ -266,3 +282,47 @@ def check_lc_length(data, percentile=None):
     group_by_id_band = group_by_id_band.groupby(['id']).count()
     ids_enough_point_count = group_by_id_band[group_by_id_band.time_count==2]
     return td_threshold, list(set(ids_enough_point_count.index.values))
+
+def ids_for_lasair():
+    """it takes a tns metafile and returns a string-like list of ids to use to query lasair with
+    !!!need to check out format"""
+    real_sns = pd.read_csv(metadata_file)
+
+    ids = real_sns["Disc. Internal Name"].drop_duplicates()
+    ids = ids.dropna()
+    ids = ids[ids.str.contains("ZTF")]
+    ids = ids.str.split(",").apply(lambda x: x[0].strip() if "ZTF" in x[0] else x[1].strip()).values
+
+    id_str = ''
+    for i in ids:
+        id_str= id_str+'"'+i+'", '
+    
+    return id_str
+
+# data_file="tns_search_sn_metadata.csv"
+# metadata_file = current_real_data_dir+data_file
+# colors = ['#00dbdd','#fd8686','#f9d62d','#b5d466','#ffa77c']
+# sn_dict = {'SN Ia':'Ia', 'SN Ib':'Ib/c', 'SN Ic':'Ib/c', 'SN II':'II','SLSN':'SLSN'}
+# plot_sns_by_type(sn_dict, metadata_file, colors)
+# plot_sns_by_date(metadata_file,colors[-1])
+
+# def merge_metadata(current_real_data_dir, n_files=5):
+# #this function is for reading metadata files downloaded from tns server and merging
+# #them together into one for later easier analysis. it receives the initial data
+# #directory and the number of files in it.
+
+#     data_file = "tns_search.csv"
+#     df=pd.read_csv(current_real_data_dir+data_file)
+
+#     for i in np.arange(1,n_files+1):
+#         data_file = current_real_data_dir+"tns_search({}).csv".format(i)
+#         print(data_file)
+#         df2 = pd.read_csv(data_file)
+#         df = pd.concat([df,df2])
+#         # print(df.head())
+#         print(df.shape)
+
+#     print(df.keys())
+#     df=df.drop_duplicates(keep="first")
+
+#     df.to_csv(current_real_data_dir+"tns_search_sn_metadata.csv",index=False)

@@ -4,94 +4,92 @@ import torch.nn.functional as F
 import torch.backends.cudnn as cudnn
 import numpy as np
 
-class SelfAttention1D(nn.Module):
+class AdditiveAttention1D(nn.Module):
 
     def __init__(self, params, da=50, r=1):
-        super(SelfAttention1D, self).__init__()
+        super(AdditiveAttention1D, self).__init__()
         self.params = params
-        if self.params["r"]:
-            self.r=self.params["r"]
-        else:
-            self.r=r
 
-        if self.params["da"]:
-            self.da=self.params["da"]
-        else:
-            self.da = da
+        self.r= r if 'r' not in self.params.keys() else self.params['r']  
+        self.da = da if 'da' not in self.params.keys() else self.params['da']
 
-        self.layer_dict = nn.ModuleDict()
-        if self.params is not None:
-            self.build_module()
-
-    def build_module(self):
-        self.layer_dict['weighted_h'] = nn.Linear(self.params["hidden_size"], self.da ,bias=False)
-        self.layer_dict['e'] = nn.Linear(self.da, self.r,bias=False)
+        self.linear1 = nn.Linear(self.params["hidden_size"], self.da ,bias=False)
+        self.linear2 = nn.Linear(self.da, self.r,bias=False)
 
     def forward(self, h):
-        # print(h.shape)
-        weighted_h = self.layer_dict["weighted_h"](h)
-        e = self.layer_dict["e"](torch.tanh(weighted_h))
-        a = F.softmax(e, dim=1)
+        out = self.linear1(h)
+        out = self.linear2(torch.tanh(out))
+
+        a = F.softmax(out, dim=1)
         a = a.permute(0,2,1)
-        # print(a.shape)
         context = torch.bmm(a,h)
-        # print(context.shape)
         return context
 
     def reset_parameters(self):
-        for item in self.layer_dict.children():
-            try:
-                item.reset_parameters()
-            except:
-                pass
+        nn.init.xavier_uniform_(self.linear1.weight)
+        nn.init.xavier_uniform_(self.linear2.weight)
+
 
 class GRU1D(nn.Module):
-    def __init__(self, params):
+    def __init__(self, params, n_layers=2, dropout=0.2):
         super(GRU1D, self).__init__()
-        self.layer_dict = nn.ModuleDict()
+
         self.params = params
-
-        if self.params is not None:
-            self.build_module()
-
-    def build_module(self):
         print("Building basic block of GRU ensemble using input shape", self.params["input_shape"])
-        print(self.params)
-        self.layer_dict["gru_0"] = nn.GRU(input_size=self.params["input_shape"][0],hidden_size = self.params["hidden_size"],batch_first=True)
-        self.layer_dict['dropout_0'] = torch.nn.Dropout(p=0.2)
-        self.layer_dict['bn_0'] = nn.BatchNorm1d(self.params["hidden_size"])
-        self.layer_dict["gru_1"] = nn.GRU(self.params["hidden_size"], self.params["hidden_size"], batch_first=True)
-        self.layer_dict['dropout_1'] = torch.nn.Dropout(p=0.2)
-        self.layer_dict['bn_1'] = nn.BatchNorm1d(self.params['hidden_size'])
-        self.layer_dict['dropout'] = torch.nn.Dropout(p=0.2)
-        self.layer_dict["self_attention"] = SelfAttention1D(self.params)
-        if self.params["r"] > 1 and self.params["attention"]=="self_attention":
-            self.layer_dict['linear'] = nn.Linear(in_features=self.params['hidden_size']*self.params["r"],out_features=self.params['num_output_classes'])
-        else:
-            self.layer_dict['linear'] = nn.Linear(in_features=self.params['hidden_size'],out_features=self.params['num_output_classes'])
+        self.layer_dict = nn.ModuleDict()
+        
+        self.h_in = self.params['input_shape'][0]
+        self.h_out = self.params["hidden_size"]
+        self.n_layers = n_layers if 'n_layers' not in self.params.keys() else self.params['n_layers']
+        dropout = dropout if 'dropout' not in self.params.keys() else self.params['dropout']
+
+        self.layer_dict['gru'] = nn.GRU(input_size=self.h_in, hidden_size = self.h_out, batch_first=True, dropout = dropout, num_layers = self.n_layers)
+        self.layer_dict['bn'] = nn.BatchNorm1d(self.h_out)
+        self.dropout = torch.nn.Dropout(dropout)
+
+        if 'attention' in self.params.keys():
+            self.layer_dict['attn'] = AdditiveAttention1D(self.params)
+
+        r = 1 if 'r' not in self.params.keys() else self.params['r'] 
+
+        self.layer_dict['linear'] = nn.Linear(in_features=self.h_out,out_features=self.params['num_output_classes'])
+        
 
     def forward(self, x):
         out = x.permute(0,2,1)
-        for i in range(2):
-            out,h = self.layer_dict["gru_{}".format(i)](out)
-            out = self.layer_dict["dropout_{}".format(i)](out)
-            out = out.permute(0,2,1)
-            out = self.layer_dict["bn_{}".format(i)](out)
-            out = out.permute(0,2,1)
-        out = self.layer_dict["dropout"](out)
-        if self.params["attention"] == "self_attention":
-            out = self.layer_dict["self_attention"](out)
-            if self.params["r"]>1:
-                out = out = out.contiguous().view(out.shape[0], -1)
-            out = self.layer_dict["linear"](out)
-            return out.squeeze()
-        elif self.params["attention"] == "no_attention":
-            out = self.layer_dict["linear"](out)
-            return out[:,-1,:]
+        out, h = self.layer_dict['gru'](out)
+        out = out.permute(0,2,1)
+        out = self.layer_dict['bn'](out)
+        out = out.permute(0,2,1)
+        if 'attn' in self.layer_dict.keys(): 
+            out = self.layer_dict['attn'](out)
+
+        out = self.dropout(out)
+        last = out[:,-1,:]
+        out = self.layer_dict['linear'](last)
+        return out
+
+    def reset_gru_layer(self):
+
+        gru_attrs = self.layer_dict['gru']._flat_weights
+        gru_attr_names = self.layer_dict['gru']._flat_weights_names
+
+        for item,name in zip(gru_attrs, gru_attr_names):
+            if 'weight'in name:
+                for idx in np.arange(3):
+                    if 'ih' in name:
+                        nn.init.xavier_uniform_(item[idx*self.h_out:(idx+1)*self.h_out])
+                    elif 'hh' in name:
+                        nn.init.orthogonal_(item[idx*self.h_out:(idx+1)*self.h_out])
+            elif 'bias' in name:
+                nn.init.constant_(item, 0)
+
 
     def reset_parameters(self):
-        for item in self.layer_dict.children():
-            try:
-                item.reset_parameters()
-            except:
-                pass
+        print("Initializing weights of GRU")
+        self.reset_gru_layer()
+        self.layer_dict['bn'].reset_parameters()
+        if 'attn' in self.layer_dict.keys(): 
+            self.layer_dict['attn'].reset_parameters()
+        self.layer_dict['linear'].reset_parameters()
+                

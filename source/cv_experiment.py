@@ -9,7 +9,7 @@ import tqdm
 import os
 import numpy as np
 import time
-# from sklearn.model_selection import KFold
+from sklearn.model_selection import StratifiedKFold
 from datasets import LCs, CachedLCs
 from data_samplers import CachedRandomSampler
 from dataset_utils import cached_crossvalidator_split
@@ -18,7 +18,7 @@ from utils import load_statistics,save_statistics,find_best_epoch
 import pandas as pd
 
 class CVExperiment(nn.Module):
-    def __init__(self, exp_name,exp_params=None,train_data=None,test_data=None,verbose=True,k=5):
+    def __init__(self, exp_name,exp_params=None,train_data=None,test_data=None,verbose=True,k=5,seed=None):
 
         super(CVExperiment, self).__init__()
         self.experiment_folder = os.path.abspath(exp_name)
@@ -38,20 +38,22 @@ class CVExperiment(nn.Module):
         self.k = k
         self.verbose = verbose
         self.train_data = train_data
+        
         if train_data:
             self.train_length = len(train_data)
-            print("TRAIN LENGTH")
-            print(len(train_data))
-            print("KF LENGTH")
-            self.kf_length = int(self.train_length/self.k)
-            kf_lengths = [self.kf_length]*self.k
-            print(kf_lengths)
-            # idxs = np.arange(self.train_length)
-            # kf = KFold(n_splits=k)
-            # self.kfs = kf.split(idxs)
-            self.chunksize=self.exp_params['chunk_size'] if 'chunk_size' in self.exp_params else 100000
-            self.kfs = cached_crossvalidator_split(train_data,kf_lengths,self.chunksize)
+ 
+            if self.exp_params["chunked"]: #just gonna ignore this for now
+                self.kf_length = int(self.train_length/self.k)
+                kf_lengths = [self.kf_length]*self.k
+                self.chunksize=self.exp_params['chunk_size'] if 'chunk_size' in self.exp_params else 100000
+                self.kfs = cached_crossvalidator_split(train_data,kf_lengths,self.chunksize)
             # print(self.kfs)
+
+            else :
+                idxs = np.arange(self.train_length)
+                targets = train_data.targets
+                kf = StratifiedKFold(n_splits=k)
+                self.kfs = kf.split(idxs,targets)
 
         self.test_data = test_data
         if test_data:
@@ -90,51 +92,71 @@ class CVExperiment(nn.Module):
     def run_train_phase(self, test_results="test_results.csv", test_summary="test_summary.csv"):
 
         for k,(tr,val) in enumerate(self.kfs):
-            train_indices = self.train_data.indices[tr]
-            val_indices = self.train_data.indices[val]
+            
+            if self.exp_params["chunked"]:
+                train_indices = self.train_data.indices[tr]
+                val_indices = self.train_data.indices[val]
 
-            train_dataset = CachedLCs(self.train_data.lc_length, self.train_data.dataset_file,self.chunksize,len(train_indices),train_indices,self.train_data.transform)
-            val_dataset = CachedLCs(self.train_data.lc_length, self.train_data.dataset_file,self.chunksize,len(val_indices),val_indices,self.train_data.transform)
-    
-            # train_dataset = torch.utils.data.Subset(self.train_data, tr)
-            # print(len(train_dataset))
-            # val_dataset = torch.utils.data.Subset(self.train_data, val)
-            # print(len(val_dataset))
-            train_sampler = CachedRandomSampler(train_dataset,chunk_size=self.chunksize)
-            val_sampler = CachedRandomSampler(val_dataset,chunk_size=self.chunksize)
+                train_dataset = CachedLCs(self.train_data.lc_length, self.train_data.dataset_file,self.chunksize,len(train_indices),train_indices,self.train_data.transform)
+                val_dataset = CachedLCs(self.train_data.lc_length, self.train_data.dataset_file,self.chunksize,len(val_indices),val_indices,self.train_data.transform)
 
-            if self.test_data:
-                test_sampler = CachedRandomSampler(self.test_data,chunk_size=self.chunksize)
+                train_sampler = CachedRandomSampler(train_dataset,chunk_size=self.chunksize)
+                val_sampler = CachedRandomSampler(val_dataset,chunk_size=self.chunksize)
+
+                if self.test_data:
+                    test_sampler = CachedRandomSampler(self.test_data,chunk_size=self.chunksize)
          
-            experiment = Experiment(
-                network_model = self.exp_params["network_model"],
-                experiment_name = self.experiment_folds+"/fold_k"+str(k+1),
-                num_epochs = self.exp_params["num_epochs"],
-                learning_rate = self.exp_params["learning_rate"],
-                weight_decay_coefficient = self.exp_params["weight_decay_coefficient"],
-                use_gpu = self.exp_params["use_gpu"],
-                batch_size = self.exp_params["batch_size"],
-                train_sampler = train_sampler,
-                val_sampler = val_sampler,
-                test_sampler = test_sampler,
-                num_output_classes= self.exp_params["num_output_classes"],
-                train_data = train_dataset,
-                val_data = val_dataset,
-                test_data = self.test_data,
-                verbose = self.verbose
-            )
+                experiment = Experiment(
+                    network_model = self.exp_params["network_model"],
+                    experiment_name = self.experiment_folds+"/fold_k"+str(k+1),
+                    num_epochs = self.exp_params["num_epochs"],
+                    learning_rate = self.exp_params["learning_rate"],
+                    weight_decay_coefficient = self.exp_params["weight_decay_coefficient"],
+                    use_gpu = self.exp_params["use_gpu"],
+                    batch_size = self.exp_params["batch_size"],
+                    train_sampler = train_sampler,
+                    val_sampler = val_sampler,
+                    test_sampler = test_sampler,
+                    num_output_classes= self.exp_params["num_output_classes"],
+                    train_data = train_dataset,
+                    val_data = val_dataset,
+                    test_data = self.test_data,
+                    verbose = self.verbose
+                )
+
+            else :
+                train_dataset = torch.utils.data.Subset(self.train_data, tr)
+                val_dataset = torch.utils.data.Subset(self.train_data, val)
+
+                experiment = Experiment(
+                    network_model = self.exp_params["network_model"],
+                    experiment_name = self.experiment_folds+"/fold_k"+str(k+1),
+                    num_epochs = self.exp_params["num_epochs"],
+                    learning_rate = self.exp_params["learning_rate"],
+                    weight_decay_coefficient = self.exp_params["weight_decay_coefficient"],
+                    use_gpu = self.exp_params["use_gpu"],
+                    batch_size = self.exp_params["batch_size"],
+                    num_output_classes= self.exp_params["num_output_classes"],
+                    train_data = train_dataset,
+                    val_data = val_dataset,
+                    test_data = self.test_data,
+                    verbose = self.verbose
+                )
 
             start_time = time.time()
             experiment.run_experiment(test_results=test_results,test_summary=test_summary)
-            stats = torch.cuda.memory_allocated()
-            print("STATS AT THE END OF A FOLD ··················")
-            print(stats)
-            torch.cuda.empty_cache()
-            print("after emptying mem ··················")
-            print(stats)
+            # stats = torch.cuda.memory_allocated()
+            # print("STATS AT THE END OF A FOLD ··················")
+            # print(stats)
+            # torch.cuda.empty_cache()
+            # print("after emptying mem ··················")
+            # print(stats)
 
             if self.verbose:
                 print("--- %s seconds ---" % (time.time() - start_time))
+
+
+
 
     def run_test_phase(self,test_results="test_results.csv",test_summary="test_summary.csv"):
         for k in np.arange(self.k):
