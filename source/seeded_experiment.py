@@ -12,7 +12,7 @@ import time
 from sklearn.model_selection import KFold
 from datasets import LCs
 from cv_experiment import CVExperiment
-from utils import load_statistics,save_statistics,find_best_epoch
+from utils import find_best_epoch
 import pandas as pd
 
 class SeededExperiment(nn.Module):
@@ -64,6 +64,21 @@ class SeededExperiment(nn.Module):
             metrics_means = metrics_group.mean()
             metrics_means.to_csv(self.experiment_logs+"/"+summary_file,index=False)
 
+            means_only = metrics_means[list(filter(lambda k : True if k.find('mean') >=0 else False, list(metrics_means.keys())))]
+            best_acc = means_only[means_only.mean_val_acc == means_only.max()['mean_val_acc']][['mean_epoch', 'mean_val_acc']]
+            best_f1 = means_only[means_only.mean_val_f1 == means_only.max()['mean_val_f1']][['mean_epoch', 'mean_val_f1']]
+            best_loss = means_only[means_only.mean_val_loss == means_only.min()['mean_val_loss']][['mean_epoch', 'mean_val_loss']]
+            best_dict = {
+                'best_val_acc': best_acc.iloc[0]['mean_val_acc'],
+                'best_val_acc_epoch':best_acc.iloc[0]['mean_epoch'],
+                'best_val_f1':best_f1.iloc[0]['mean_val_f1'],
+                'best_val_f1_epoch':best_f1.iloc[0]['mean_epoch'],
+                'best_val_loss':best_loss.iloc[0]['mean_val_loss'],
+                'best_val_loss_epoch':best_loss.iloc[0]['mean_epoch'],
+            }
+            best_values = pd.DataFrame(best_dict,index=[0])
+            best_values.to_csv(self.experiment_logs+"/best_"+summary_file,index=False)
+
 
     def run_experiment(self, test_results="test_results.csv", test_summary="test_summary.csv"):
         start_time = time.time()
@@ -81,7 +96,7 @@ class SeededExperiment(nn.Module):
                 self.verbose,
                 k=self.k,
                 seed=seed)
-            experiment.run_experiment(test_results,test_summary)
+            experiment.run_experiment()
 
         if self.train_data and self.test_data:
             self.save_seed_statistics(["validation_summary.csv",test_summary])

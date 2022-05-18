@@ -46,7 +46,8 @@ class LCs(Dataset):
     def load_data_into_memory(self):
         try:
             with h5py.File(self.dataset_h5,'r') as f:
-                X = f["X"][:,0:self.n_channels,0:self.lc_length]
+                # X = f["X"][:,0:self.n_channels,0:self.lc_length]
+                X = f["X"][:,0:self.n_channels]
                 Y = f["Y"]
                 ids = f["ids"]
                 self.X = torch.tensor(X, device = self.device, dtype=torch.float)

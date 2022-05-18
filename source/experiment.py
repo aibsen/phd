@@ -240,9 +240,10 @@ class Experiment(nn.Module):
         train_stats = {"epoch": [],"train_acc": [], "train_loss": [], "train_f1":[],"train_precision":[],"train_recall":[]}  # initialize a dict to keep the per-epoch metrics
         val_stats = {"epoch": [],"val_acc": [],"val_loss": [], "val_f1":[], "val_precision":[],"val_recall":[]}
         
-        strike = 0
+        strike = -1
         step_count = 0
         val_loss = np.Inf #initial value
+        last_val_performance = 0
 
         with tqdm.tqdm(total=self.num_epochs) as pbar_train:
 
@@ -286,7 +287,6 @@ class Experiment(nn.Module):
                         val_predictions += pred
                         val_targets += targets
                         
-
                     val_loss = val_loss_cum/n_batches
                     accuracy = accuracy_score(val_targets, val_predictions)
                     precision, recall, f1, _ = precision_recall_fscore_support(val_targets, val_predictions, average = 'macro', zero_division=0)
@@ -299,22 +299,26 @@ class Experiment(nn.Module):
                     val_stats['epoch'].append(epoch_idx)
 
                 #if the f1-score of the current epoch for the validation set is better than previous epochs
-                if f1 > self.best_val_model_f1:
-                    self.best_val_model_f1 = f1
-                    self.best_val_model_idx = epoch_idx
-                    self.save_model(model_save_dir=self.experiment_saved_models,
-                        model_save_name="epoch", model_idx=epoch_idx,best_validation_model_idx=self.best_val_model_idx)
-                    self.break_epoch = epoch_idx
-                    strike = 0
-                else:
-                    strike+=1
+                    if f1 > self.best_val_model_f1:
+                        self.best_val_model_f1 = f1
+                        self.best_val_model_idx = epoch_idx
+                        self.save_model(model_save_dir=self.experiment_saved_models,
+                            model_save_name="epoch", model_idx=epoch_idx,best_validation_model_idx=self.best_val_model_idx)
+                        self.break_epoch = epoch_idx
+                        strike = -1
+
+                    elif f1 < last_val_performance:
+                        strike+=1
+                        # print("strike {} at ep {}".format(strike, i))
+
+                    last_val_performance = f1
 
                 pbar_train.update(1)
                 elapsed_time = time.time() - start_time 
                 pbar_train.set_description("Tr/Val loss: {:.3f}/{:.3f}, ET {:.2f}s".format(train_loss,val_loss,elapsed_time))
 
                 if strike == self.patience:
-                    print("Early stop, model is overfitting")
+                    # print("Early stop, model is overfitting")
                     break
 
         #save statistics at the end only
