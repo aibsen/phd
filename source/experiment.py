@@ -13,7 +13,7 @@ import time
 from torch.utils.data import SequentialSampler
 from sklearn.metrics import precision_recall_fscore_support, accuracy_score
 from torchmetrics import Accuracy, F1Score
-from torchmetrics.functional import precision_recall
+from torchmetrics.functional import precision_recall, f1_score, accuracy
 # from utils import save_to_stats_pkl_file, load_from_stats_pkl_file, \
 #     save_statistics, load_statistics, save_classification_results
 
@@ -153,6 +153,41 @@ class Experiment(nn.Module):
         path = os.path.join(experiment_log_dir, filename)
         df.to_csv(path,sep=',',index=False)
 
+    
+
+    def save_train_val_statistics0(self, train_stats, val_stats, train_last_cm, val_last_cm):
+        
+        stats_keys = ['epoch', 'accuracy', 'loss', 'f1', 'precision', 'recall']
+        train_stats = train_stats.cpu().numpy()
+        val_stats = val_stats.cpu().numpy()
+        train_df = pd.DataFrame(train_stats, columns = stats_keys)
+        train_df.epoch = train_df.epoch.astype(int)
+        val_df = pd.DataFrame(val_stats, columns = stats_keys)
+        val_df.epoch = val_df.epoch.astype(int)
+        train_df.to_csv(self.experiment_logs+'/training_summary.csv',sep=',',index=False)
+        val_df.to_csv(self.experiment_logs+'/validation_summary.csv',sep=',',index=False)
+
+        results_keys = ['object_id','prediction','target']
+        train_cm = train_last_cm.cpu().numpy()
+        val_cm = val_last_cm.cpu().numpy()
+        train_cm_df = pd.DataFrame(train_cm, columns=results_keys)
+        val_cm_df = pd.DataFrame(val_cm, columns=results_keys)
+        train_cm_df.to_csv(self.experiment_logs+'/train_results.csv',sep=',',index=False)
+        val_cm_df.to_csv(self.experiment_logs+'/validation_results.csv',sep=',',index=False)
+
+
+    def save_statistics0(self, stats, fn):
+        stats_keys = ['epoch', 'accuracy', 'loss', 'f1', 'precision', 'recall']
+        stats_df = pd.DataFrame(stats.cpu().numpy() , columns = stats_keys)
+        stats_df.epoch = stats_df.epoch.astype(int)
+        stats_df.to_csv(self.experiment_logs+'/'+fn ,sep=',',index=False)
+
+    def save_results0(self, results, fn):
+        results_keys = ['object_id','prediction','target']
+        results_df = pd.DataFrame(results.cpu().numpy(), columns=results_keys)
+        results_df.to_csv(self.experiment_logs+'/'+fn,sep=',',index=False)
+
+    
     def run_test_phase(self, data, model_idx, experiment_log_dir, model_name="final_model"):
         start_time = time.time()
         self.load_model(model_save_dir=experiment_log_dir, model_save_name=model_name,model_idx=model_idx)
@@ -183,50 +218,54 @@ class Experiment(nn.Module):
         self.save_statistics(experiment_log_dir=experiment_log_dir,filename='test_results.csv',stats_dict=results)
         self.save_statistics(experiment_log_dir=experiment_log_dir, filename="test_summary.csv",stats_dict=metrics)
 
-    def run_final_train_phase(self, data_loaders, experiment_log_dir, model_name="final_model"):
+    def run_final_train_phase(self, model_name="final_model"):
         start_time = time.time()
-                
+
+        data_loaders = [self.train_data,self.val_data]
         self.model.reset_parameters()
-        train_stats = {"epoch": [],"train_acc": [], "train_loss": [], "train_f1":[],"train_precision":[],"train_recall":[]}  # initialize a dict to keep the per-epoch metrics
+        train_stats = torch.full((int(self.break_epoch),6),-1, dtype=torch.float, device=self.device) # holds epoch, acc, loss, f1, precission, recall, per train epoch
 
         n_batches = sum([len(data) for data in data_loaders])
+        data_length = sum([len(data.dataset) for data in data_loaders])
+        last_train_cm = torch.zeros((data_length,3), dtype=torch.int, device = self.device) # holds ids, preds, targets
+
         with tqdm.tqdm(total=self.break_epoch) as pbar_train:
 
             for i, epoch_idx in enumerate(range(self.starting_epoch, self.break_epoch)):
                 
                 epoch_start_time = time.time()
-                train_loss_cum = 0 
-                train_predictions = []
-                train_targets = []
+                running_loss = 0.0
+                cm_idx = 0    
 
-                for data in data_loaders:
+                for i, data in enumerate(data_loaders):
                     for idx, (x, y,ids) in enumerate(data):
-                        loss, pred, targets = self.run_train_iter(x=x, y=y)
-                        train_loss_cum += loss
-                        train_predictions += pred
-                        train_targets += targets
-                        
-                
-                loss = train_loss_cum/n_batches
-                accuracy = accuracy_score(train_targets, train_predictions)
-                precision, recall, f1, _ = precision_recall_fscore_support(train_targets, train_predictions, average = 'macro', zero_division=0)
-                
-                train_stats['train_acc'].append(accuracy)
-                train_stats['train_loss'].append(loss)
-                train_stats['train_f1'].append(f1)
-                train_stats['train_recall'].append(recall)
-                train_stats['train_precision'].append(precision)
-                train_stats['epoch'].append(epoch_idx)
-                pbar_train.update(1)
+                        loss, preds = self.run_train_iter(x=x, y=y)
+                        running_loss += loss.item()
+                        batch_size = len(x)
+                        torch.stack((ids,preds,y),dim=1,out=last_train_cm[cm_idx])
+                        cm_idx+=batch_size
 
+                preds, targets = last_train_cm[:,1],last_train_cm[:,2]
+                precision, recall = precision_recall(preds, targets, num_classes=self.num_output_classes, average='macro')
+                f1 = f1_score(preds, targets, num_classes=self.num_output_classes, average='macro')
+                train_loss = running_loss/n_batches
+                acc = accuracy(preds,targets, num_classes=self.num_output_classes, average='micro') #accuracy
+
+                train_stats[epoch_idx,0] = epoch_idx #epoch
+                train_stats[epoch_idx,1] = accuracy(preds,targets, num_classes=self.num_output_classes, average='micro') #accuracy
+                train_stats[epoch_idx,2] = train_loss #loss
+                train_stats[epoch_idx,3] = f1 #f1
+                train_stats[epoch_idx,4] = precision # precision
+                train_stats[epoch_idx,5] = recall #recall
+
+                pbar_train.update(1)
                 elapsed_time = time.time() - start_time  
-                pbar_train.set_description("Train loss: {:.3f}       , ET {:.2F}s".format(loss,elapsed_time))
+                pbar_train.set_description("Train loss: {:.3f}       , ET {:.2f}s".format(train_loss,elapsed_time))
                 
-                
-        self.save_statistics(experiment_log_dir=experiment_log_dir, filename='final_training_summary.csv',
-            stats_dict=train_stats)  # save statistics
-        self.save_model(model_save_dir=experiment_log_dir,
-                    model_save_name=model_name, model_idx=self.break_epoch,best_validation_model_idx=self.break_epoch)    
+        self.save_statistics0(train_stats, 'final_training_summary.csv')
+        self.save_results0(last_train_cm, 'final_training_results.csv')
+        self.save_model(model_save_dir=self.experiment_saved_models,
+            model_save_name=model_name, model_idx=epoch_idx,best_validation_model_idx=self.best_val_model_idx) 
         
     def run_train_phase(self):
         start_time = time.time()
@@ -254,9 +293,12 @@ class Experiment(nn.Module):
 
                 for idx, (x, y,ids) in enumerate(self.train_data):
                     loss, pred = self.run_train_iter(x=x, y=y)
-                    last_train_cm[idx*self.batch_size:(idx+1)*self.batch_size,0] = ids
-                    last_train_cm[idx*self.batch_size:(idx+1)*self.batch_size,1] = pred
-                    last_train_cm[idx*self.batch_size:(idx+1)*self.batch_size,2] = y
+                    batch_size = len(x)
+                    cm_start = idx*batch_size
+                    cm_stop = (idx+1)*batch_size
+                    last_train_cm[cm_start:cm_stop,0] = ids
+                    last_train_cm[cm_start:cm_stop,1] = pred
+                    last_train_cm[cm_start:cm_stop,2] = y
                     running_train_loss += loss.item()
                 
                 preds, targets = last_train_cm[:,1],last_train_cm[:,2]
@@ -277,9 +319,12 @@ class Experiment(nn.Module):
 
                     for idx, (x, y, ids) in enumerate(self.val_data):
                         loss, pred = self.run_evaluation_iter(x=x, y=y)
-                        current_val_cm[idx*self.batch_size:(idx+1)*self.batch_size,0] = ids
-                        current_val_cm[idx*self.batch_size:(idx+1)*self.batch_size,1] = pred
-                        current_val_cm[idx*self.batch_size:(idx+1)*self.batch_size,2] = y
+                        batch_size = len(x)
+                        cm_start = idx*batch_size
+                        cm_stop = (idx+1)*batch_size
+                        current_val_cm[cm_start:cm_stop,0] = ids
+                        current_val_cm[cm_start:cm_stop,1] = pred
+                        current_val_cm[cm_start:cm_stop,2] = y
                         running_val_loss += loss.item()
 
                     preds, targets = current_val_cm[:,1],current_val_cm[:,2]
@@ -324,26 +369,7 @@ class Experiment(nn.Module):
         #save statistics at the end only
         self.save_train_val_statistics0(train_stats, val_stats, last_train_cm, best_val_cm)
     
-    def save_train_val_statistics0(self, train_stats, val_stats, train_last_cm, val_last_cm):
-        
-        stats_keys = ['epoch', 'accuracy', 'loss', 'f1', 'precision', 'recall']
-        train_stats = train_stats.cpu().numpy()
-        val_stats = val_stats.cpu().numpy()
-        train_df = pd.DataFrame(train_stats, columns = stats_keys)
-        train_df.epoch = train_df.epoch.astype(int)
-        val_df = pd.DataFrame(val_stats, columns = stats_keys)
-        val_df.epoch = val_df.epoch.astype(int)
-        train_df.to_csv(self.experiment_logs+'/training_summary.csv',sep=',',index=False)
-        val_df.to_csv(self.experiment_logs+'/validation_summary.csv',sep=',',index=False)
-
-        results_keys = ['object_id','prediction','target']
-        train_cm = train_last_cm.cpu().numpy()
-        val_cm = val_last_cm.cpu().numpy()
-        train_cm_df = pd.DataFrame(train_cm, columns=results_keys)
-        val_cm_df = pd.DataFrame(val_cm, columns=results_keys)
-        train_cm_df.to_csv(self.experiment_logs+'/train_results.csv',sep=',',index=False)
-        val_cm_df.to_csv(self.experiment_logs+'/validation_results.csv',sep=',',index=False)
-
+    
     def run_experiment(self):
         """
         Runs experiment train and evaluation iterations, saving the model and best val model and val model accuracy after each epoch
