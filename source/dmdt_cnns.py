@@ -117,32 +117,50 @@ class DMDTCNN(nn.Module):
             self.build_module()
 
     def build_module(self):
-        print("Building Vanilla CNN using input shape", self.params["input_shape"])
+        print("Building DMDTCNN using input shape", self.params["input_shape"])
         in_channels = self.in_channels
         self.layer_dict['conv_0'] = nn.Conv2d(in_channels=in_channels,out_channels=self.n_filters,kernel_size=self.ks)
-        self.layer_dict['conv_1'] = nn.Conv2d(in_channels=self.n_filters,out_channels=self.n_filters,kernel_size=self.ks)
-        self.layer_dict['conv_2'] = nn.Conv2d(in_channels=self.n_filters*2,out_channels=self.n_filters*2,kernel_size=self.ks)
+        self.layer_dict['conv_1'] = nn.Conv2d(in_channels=self.n_filters,out_channels=self.n_filters*2,kernel_size=self.ks)
+        self.layer_dict['conv_2'] = nn.Conv2d(in_channels=self.n_filters*2,out_channels=self.n_filters*2*2,kernel_size=self.ks)
 
         #lambda to calculate output size f convolutional blocks
-        input_linear = self.n_filters*(int((self.img_size-(self.ks-1))/2))**2
-        self.layer_dict["linear_0"] = nn.Linear(in_features=input_linear,out_features=input_linear)
-        self.layer_dict["linear_1"] = nn.Linear(in_features=input_linear,out_features=input_linear)
-        self.layer_dict["linear_1"] = nn.Linear(in_features=input_linear,out_features=14)
+
+        
+        input_linear = (self.n_filters*2*2)*int((self.img_size - (self.ks -1))/2 -2*(self.ks-1))**2 #after 1 conv, 1 maxpool and 2 conv
+        
+        output_linear = int(self.n_filters*2*2*2)
+        # print(input_linear)
+        # print(output_linear)
+        self.layer_dict["linear_0"] = nn.Linear(in_features=input_linear,out_features=output_linear)
+        self.layer_dict["linear_1"] = nn.Linear(in_features=output_linear,out_features=output_linear)
+        self.layer_dict["linear_2"] = nn.Linear(in_features=output_linear,out_features=14)
 
 
     def forward(self, x):
         out = x
+        # print(out.shape)
+
         out = F.relu(self.layer_dict["conv_0"](out))
+        # print(out.shape)
+
         out = nn.MaxPool2d(2)(out)
+        # print(out.shape)
+
         out = nn.Dropout(p=0.1)(out)
         out = F.relu(self.layer_dict["conv_1"](out))
+        # print(out.shape)
+
         out = F.relu(self.layer_dict["conv_2"](out))
+        # print(out.shape)
         out = torch.flatten(out,start_dim=1)
+        # print(out.shape)
         out = F.relu(self.layer_dict['linear_0'](out))
+        # print(out.shape)
         out = nn.Dropout(p=0.5)(out)
         out = F.relu(self.layer_dict['linear_1'](out))
-        out = F.relu(self.layer_dict['linear_2'](out))
-        out = self.layer_dict['linear_1'](out)
+        # print(out.shape)
+
+        out = self.layer_dict['linear_2'](out)
         return out
 
     def reset_parameters(self):
