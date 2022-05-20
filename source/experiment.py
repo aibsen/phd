@@ -135,14 +135,10 @@ class Experiment(nn.Module):
         state['network'] = self.model.state_dict()  # save network parameter and other variables.
         state['best_val_model_idx'] = best_validation_model_idx  # save current best val idx
         torch.save(state, f=os.path.join(model_save_dir, "{}_{}".format(model_save_name, str(
-            model_idx))))
+            model_idx+1))))
 
     def load_model(self, model_save_dir, model_save_name, model_idx):
-        print(model_save_dir)
-        print(model_save_name)
-        print(model_idx)
-        filename = os.path.join(model_save_dir, "{}_{}".format(model_save_name, str(model_idx)))
-        print(filename)
+        filename = os.path.join(model_save_dir, "{}_{}".format(model_save_name, str(model_idx+1)))
         state = torch.load(f=filename)
         self.model.load_state_dict(state_dict=state['network'])
         return state['best_val_model_idx']#, state['best_val_model_acc'], state['best_val_model_f1']
@@ -160,7 +156,7 @@ class Experiment(nn.Module):
         results_df.to_csv(self.experiment_logs+'/'+fn,sep=',',index=False)
 
     
-    def run_test_phase(self, data=None, model_idx=None, model_name="final_model"):
+    def run_test_phase(self, data=None, model_idx=None, model_name="final_model",data_name="test"):
         start_time = time.time()
         model_idx = model_idx if model_idx else self.best_val_model_idx
         data = data if data else self.test_data
@@ -182,20 +178,20 @@ class Experiment(nn.Module):
         precision, recall = precision_recall(preds, targets, num_classes=self.num_output_classes, average='macro')
         loss = running_loss/len(data)
         test_stats = torch.full((1,6),-1, dtype=torch.float, device=self.device) # holds epoch, acc, loss, f1, precission, recall, per train epoch
-        test_stats[0,0] = 0 #epoch
+        test_stats[0,0] = 1 #epoch
         test_stats[0,1] = accuracy(preds,targets, num_classes=self.num_output_classes, average='micro') #accuracy
         test_stats[0,2] = loss #loss
         test_stats[0,3] = f1_score(preds, targets, num_classes=self.num_output_classes, average='macro') #f1
         test_stats[0,4] = precision # precision
         test_stats[0,5] = recall #recall
 
-        self.save_statistics(test_stats,"test_summary.csv")
-        self.save_results(results_cm,"test_results.csv")
+        self.save_statistics(test_stats, data_name+"_summary.csv")
+        self.save_results(results_cm, data_name+"_results.csv")
 
-    def run_final_train_phase(self, n_epochs=None, model_name="final_model"):
+    def run_final_train_phase(self, data_loaders=None,n_epochs=None, model_name="final_model"):
         start_time = time.time()
         n_epochs = n_epochs if n_epochs else self.best_val_model_idx
-        data_loaders = [self.train_data,self.val_data]
+        data_loaders = data_loaders if data_loaders else [self.train_data,self.val_data]
         self.model.reset_parameters()
         train_stats = torch.full((n_epochs+1,6),-1, dtype=torch.float, device=self.device) # holds epoch, acc, loss, f1, precission, recall, per train epoch
 
@@ -223,7 +219,7 @@ class Experiment(nn.Module):
                 precision, recall = precision_recall(preds, targets, num_classes=self.num_output_classes, average='macro')
                 train_loss = running_loss/n_batches
 
-                train_stats[epoch_idx,0] = epoch_idx #epoch
+                train_stats[epoch_idx,0] = epoch_idx+1 #epoch
                 train_stats[epoch_idx,1] = accuracy(preds,targets, num_classes=self.num_output_classes, average='micro') #accuracy
                 train_stats[epoch_idx,2] = train_loss #loss
                 train_stats[epoch_idx,3] = f1_score(preds, targets, num_classes=self.num_output_classes, average='macro') #f1
@@ -273,7 +269,7 @@ class Experiment(nn.Module):
                 precision, recall = precision_recall(preds,targets, num_classes=self.num_output_classes, average='macro')
                 train_loss = running_train_loss/train_n_batches
 
-                train_stats[epoch_idx,0] = epoch_idx #epoch
+                train_stats[epoch_idx,0] = epoch_idx+1 #epoch
                 train_stats[epoch_idx,1] = accuracy(preds,targets, num_classes=self.num_output_classes, average='micro') #accuracy
                 train_stats[epoch_idx,2] = train_loss #loss
                 train_stats[epoch_idx,3] = f1_score(preds,targets, num_classes = self.num_output_classes, average='macro') #f1
@@ -295,7 +291,7 @@ class Experiment(nn.Module):
                     f1 = f1_score(preds,targets, num_classes=self.num_output_classes, average='macro')
                     val_loss = running_val_loss/val_n_batches
 
-                    val_stats[val_idx,0] = epoch_idx #epoch
+                    val_stats[val_idx,0] = epoch_idx+1 #epoch
                     val_stats[val_idx,1] = accuracy(preds,targets, num_classes=self.num_output_classes, average='micro') #accuracy
                     val_stats[val_idx,2] = val_loss #loss
                     val_stats[val_idx,3] = f1 #f1
@@ -322,7 +318,7 @@ class Experiment(nn.Module):
                 pbar_train.set_description("Tr/Val loss: {:.3f}/{:.3f}, Strike: {}, ET {:.2f}s".format(train_loss,val_loss,strike,elapsed_time))
                 
                 if strike == self.patience:
-                    pbar_train.set_description("Tr/Val loss: {:.3f}/{:.3f}, Best epoch: {}, ET {:.2f}s".format(train_loss,val_loss,self.best_val_model_idx,elapsed_time))
+                    pbar_train.set_description("Tr/Val loss: {:.3f}/{:.3f}, Best epoch: {}, ET {:.2f}s".format(train_loss,val_loss,self.best_val_model_idx+1,elapsed_time))
                     break
 
         #save statistics at the end only
