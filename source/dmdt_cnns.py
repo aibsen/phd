@@ -10,9 +10,9 @@ import tqdm
 import os
 import numpy as np
 
-class CNN(nn.Module):
+class VanillaCNN(nn.Module):
     def __init__(self,params=None):
-        super(CNN, self).__init__()
+        super(VanillaCNN, self).__init__()
         self.layer_dict = nn.ModuleDict()
         self.params = params
         if self.params is not None:
@@ -21,7 +21,7 @@ class CNN(nn.Module):
             self.n_layers = self.params["n_layers"]
             self.n_filters = self.params["n_filters"]
             self.ks = self.params['kernel_size']
-            self.drop_out = self.params['drop_out']
+            # self.drop_out = self.params['drop_out']
             self.build_module()
 
     def build_module(self):
@@ -45,7 +45,7 @@ class CNN(nn.Module):
         for i in range(self.n_layers):
             out = F.relu(self.layer_dict['bn_{}'.format(i)](self.layer_dict["conv_{}".format(i)](out)))
             out = nn.MaxPool2d(2)(out)
-            out = nn.Dropout(p=self.drop_out)(out)
+            # out = nn.Dropout(p=self.drop_out)(out)
         out = torch.flatten(out,start_dim=1)
         out = F.relu(self.layer_dict['linear_0'](out))
         out = self.layer_dict['linear_1'](out)
@@ -73,7 +73,7 @@ class DMDTShallowCNN(nn.Module):
             self.build_module()
 
     def build_module(self):
-        print("Building Vanilla CNN using input shape", self.params["input_shape"])
+        print("Building Shallow CNN using input shape", self.params["input_shape"])
         self.layer_dict['conv'] = nn.Conv2d(in_channels=self.in_channels,out_channels=self.n_filters,kernel_size=self.ks)
         #lambda to calculate output size f convolutional blocks
         out_f = int((self.img_size-(self.ks-1)))
@@ -95,7 +95,7 @@ class DMDTShallowCNN(nn.Module):
         return out
 
     def reset_parameters(self):
-        print("Initializing weights of Vanilla CNN")
+        print("Initializing weights of Shallow CNN")
         for item in self.layer_dict.children():
             try:
                 item.reset_parameters()
@@ -164,7 +164,7 @@ class DMDTCNN(nn.Module):
         return out
 
     def reset_parameters(self):
-        print("Initializing weights of Vanilla CNN")
+        print("Initializing weights of DMDTCNN")
         for item in self.layer_dict.children():
             try:
                 item.reset_parameters()

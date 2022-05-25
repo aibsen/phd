@@ -35,24 +35,29 @@ class LCs(Dataset):
 
     def __getitem__(self, idx):
 
-        if self.X is None:
-            self.load_data_into_memory()
-        sample = self.X[idx],self.Y[idx], self.ids[idx]
-        if self.transform:
-            return self.transform(sample)
-        else:
-            return sample
+        # if self.X is None:
+        #     self.load_data_into_memory()
+        # sample = self.X[idx],self.Y[idx], self.ids[idx]
+        # if self.transform:
+        #     return self.transform(sample)
+        # else:
+        return self.X[idx],self.Y[idx], self.ids[idx]
 
     def load_data_into_memory(self):
+        print("loading data into memmory")
+
         try:
             with h5py.File(self.dataset_h5,'r') as f:
                 # X = f["X"][:,0:self.n_channels,0:self.lc_length]
                 X = f["X"][:,0:self.n_channels]
                 Y = f["Y"]
                 ids = f["ids"]
+                # self.X = torch.tensor(X,dtype=torch.float)
                 self.X = torch.tensor(X, device = self.device, dtype=torch.float)
+                # self.ids = torch.tensor(ids, dtype=torch.int)
                 self.ids = torch.tensor(ids, device = self.device, dtype=torch.int)
                 self.Y = torch.tensor(Y, device = self.device, dtype=torch.long)
+                # self.Y = torch.tensor(Y, dtype=torch.long)
         except Exception as e:
             print(e)
 

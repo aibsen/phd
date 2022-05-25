@@ -81,7 +81,7 @@ class SeededExperiment(nn.Module):
         start_time = time.time()
 
         for seed in self.seeds:
-            torch.manual_seed(seed=seed)
+            torch.cuda.manual_seed(seed=seed)
             print("Starting experiment, seed: "+str(seed))
             exp_name = self.experiment_folder+"/seed_"+str(seed)
             print(exp_name)
@@ -93,36 +93,39 @@ class SeededExperiment(nn.Module):
                 seed=seed)
             experiment.run_experiment()
 
-        self.save_seed_statistics("test_summary.csv")
-        self.save_seed_statistics("final_training_summary.csv")
-        self.save_seed_statistics("validation_summary.csv")
+        if self.train_data:
+            self.save_seed_statistics("validation_summary.csv")
+
+        if self.test_data:
+            self.save_seed_statistics("test_summary.csv")
+            self.save_seed_statistics("final_training_summary.csv")
 
         if self.verbose:
             print("--- %s seconds ---" % (time.time() - start_time))
     
-    # def get_seeds_from_folders(self):
-    #     rootdir = self.experiment_folder
-    #     subdirs = os.walk(rootdir).__next__()[1]
-    #     subdirs = filter(lambda s: True if 'seed' in s else False, subdirs) 
-    #     return list(map(lambda s: s.split("_")[1],subdirs))
+    def get_seeds_from_folders(self):
+        rootdir = self.experiment_folder
+        subdirs = os.walk(rootdir).__next__()[1]
+        subdirs = filter(lambda s: True if 'seed' in s else False, subdirs) 
+        return list(map(lambda s: s.split("_")[1],subdirs))
 
-    # def get_best_results(self, results_filename="test_results.csv", summary_filename="test_summary.csv"):
-    # #returns the classification results for best iteration
-    #     seeds = self.get_seeds_from_folders()     
-    #     best_seed = -1
-    #     best_k = -1
-    #     best_results = -1
-    #     for seed in seeds:
-    #         exp_name = self.experiment_folder+"/seed_"+str(seed)
-    #         cve = CVExperiment(exp_name)
-    #         k, new_best_results = cve.get_best_fold(summary_filename)
-    #         if new_best_results > best_results:
-    #             best_k = k
-    #             new_best_results = best_results
-    #             best_seed = seed
-    #     r_file = self.experiment_folder+"/seed_"+str(best_seed)+"/folds/fold_k"+str(best_k)+"/result_outputs/"+results_filename
-    #     # results = pd.read_csv(r_file)
-    #     return seed, k, r_file
+    def get_best_validation_results(self):
+    #returns the classification results for best iteration
+        seeds = self.get_seeds_from_folders()     
+        best_seed = -1
+        best_k = -1
+        best_results = -1
+        for seed in seeds:
+            exp_name = self.experiment_folder+"/seed_"+str(seed)
+            cve = CVExperiment(exp_name)
+            k, new_best_results = cve.get_best_fold(summary_filename)
+            if new_best_results > best_results:
+                best_k = k
+                new_best_results = best_results
+                best_seed = seed
+        r_file = self.experiment_folder+"/seed_"+str(best_seed)+"/folds/fold_k"+str(best_k)+"/result_outputs/"+results_filename
+        # results = pd.read_csv(r_file)
+        return seed, k, r_file
 
     # def get_all_metrics(self,metric="f1",summary_filename="test_summary.csv"):
     # #given a metric it goes through all exp folders and gets the relevant metric

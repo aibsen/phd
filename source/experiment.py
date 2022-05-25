@@ -66,14 +66,14 @@ class Experiment(nn.Module):
             if train_sampler is not None:
                 train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, sampler=train_sampler)
             else:
-                train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=True)
+                train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=False)
             self.train_data = train_loader
 
         if val_data:
             if val_sampler is not None:
                 val_loader = torch.utils.data.DataLoader(val_data,batch_size=batch_size,sampler=val_sampler)
             else:
-                val_loader = torch.utils.data.DataLoader(val_data, batch_size=batch_size, shuffle=True)
+                val_loader = torch.utils.data.DataLoader(val_data, batch_size=batch_size, shuffle=False)
             self.val_data = val_loader
 
         if test_data:
@@ -264,7 +264,7 @@ class Experiment(nn.Module):
                     loss, preds = self.run_train_iter(x=x, y=y)
                     running_train_loss += loss.item()
                     torch.stack((ids,preds,y),dim=1,out=last_train_cm[idx*self.batch_size])
-                
+
                 preds, targets = last_train_cm[:,1],last_train_cm[:,2]
                 precision, recall = precision_recall(preds,targets, num_classes=self.num_output_classes, average='macro')
                 train_loss = running_train_loss/train_n_batches

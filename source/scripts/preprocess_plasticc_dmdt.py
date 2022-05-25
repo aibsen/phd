@@ -21,11 +21,11 @@ from preprocess_data_utils import *
 plasticc_data_dir = "../../data/plasticc/csvs/" 
 plasticc_processed_data_dir = "../../data/plasticc/dmdt/" 
 
-train_data_file = plasticc_data_dir+'plasticc_train_lightcurves.csv'
-train_metadata_file = plasticc_data_dir+"plasticc_train_metadata.csv"
+# train_data_file = plasticc_data_dir+'plasticc_train_lightcurves.csv'
+# train_metadata_file = plasticc_data_dir+"plasticc_train_metadata.csv"
 
-test_data_file_template = plasticc_data_dir+'plasticc_test_set_batch'
-test_metadata_file = plasticc_data_dir+"plasticc_test_metadata.csv"
+# test_data_file_template = plasticc_data_dir+'plasticc_test_set_batch'
+# test_metadata_file = plasticc_data_dir+"plasticc_test_metadata.csv"
 
 
 
@@ -42,58 +42,58 @@ def save_dmdts(dataset, output_fname):
     hf.create_dataset('Y',data=dataset['Y'])
     hf.close()
 
-def create_training_set(metadata_file, data_file, base=10, binm=24, bint=24):#fix base so it can be modified, currently it only works with 10
-    meta_data = pd.read_csv(metadata_file)
-    n_objs = len(meta_data.object_id.unique())
-    n_channels = 6
-    data = pd.read_csv(data_file)
-    data['ob_p']=data.object_id*10+data.passband
+# def create_training_set(metadata_file, data_file, base=10, binm=24, bint=24):#fix base so it can be modified, currently it only works with 10
+#     meta_data = pd.read_csv(metadata_file)
+#     n_objs = len(meta_data.object_id.unique())
+#     n_channels = 6
+#     data = pd.read_csv(data_file)
+#     data['ob_p']=data.object_id*10+data.passband
     
-    #get dmdt bins
-    group_by_mjd=data.groupby(['object_id'])['mjd'].agg(['min','max']).rename(columns = lambda x: 'mjd_' + x).reset_index()
-    group_by_flux=data.groupby(['object_id'])['flux'].agg(['min','max']).rename(columns = lambda x: 'flux_' + x).reset_index()
-    min_max = pd.merge(group_by_flux,group_by_mjd, how="left", on='object_id')
-    min_max['dm'] = min_max['flux_max'] - min_max['flux_min']
-    min_max['dt'] = min_max['mjd_max'] - min_max['mjd_min']
-    range_stats = min_max.describe()
+#     #get dmdt bins
+#     group_by_mjd=data.groupby(['object_id'])['mjd'].agg(['min','max']).rename(columns = lambda x: 'mjd_' + x).reset_index()
+#     group_by_flux=data.groupby(['object_id'])['flux'].agg(['min','max']).rename(columns = lambda x: 'flux_' + x).reset_index()
+#     min_max = pd.merge(group_by_flux,group_by_mjd, how="left", on='object_id')
+#     min_max['dm'] = min_max['flux_max'] - min_max['flux_min']
+#     min_max['dt'] = min_max['mjd_max'] - min_max['mjd_min']
+#     range_stats = min_max.describe()
     
-    max_dt = range_stats['dt']['max']
-    max_dt_log = np.log10(max_dt)
-    dt_bins = np.logspace(1,max_dt_log,33,base=base)
+#     max_dt = range_stats['dt']['max']
+#     max_dt_log = np.log10(max_dt)
+#     dt_bins = np.logspace(1,max_dt_log,33,base=base)
 
-    max_dm = range_stats['dm']['max']
-    max_dm_log = np.log10(max_dm)
-    dm_bins = np.logspace(0,max_dm_log,11,base=base)
-    dm_bins_not = np.sort(dm_bins*(-1))
-    dm_bins = np.append(0,dm_bins)
-    dm_bins = np.append(dm_bins_not,dm_bins)
+#     max_dm = range_stats['dm']['max']
+#     max_dm_log = np.log10(max_dm)
+#     dm_bins = np.logspace(0,max_dm_log,16,base=base)
+#     dm_bins_not = np.sort(dm_bins*(-1))
+#     dm_bins = np.append(0,dm_bins)
+#     dm_bins = np.append(dm_bins_not,dm_bins)
 
-    data['count'] = 1
-    data['cc'] = data.groupby(['ob_p'])['count'].cumcount()
-    unstack = data[['ob_p','mjd','flux','cc']].set_index(['ob_p','cc']).unstack()
-    mjds = unstack['mjd'].values
-    fluxes = unstack['flux'].values
-    nan_masks = ~np.isnan(mjds)[:,:]
-    n_lcs = mjds.shape[0]
-    DMDTs = np.zeros((n_lcs,len(dm_bins)-1,len(dt_bins)-1))
-    c=0
-    for i in range(n_lcs):
-        true_mjds = mjds[i][nan_masks[i]]
-        true_fluxes = fluxes[i][nan_masks[i]]
-        dms = np.clip([(y - x) for x, y in it.combinations(true_fluxes, 2)], dm_bins[0],dm_bins[-1])
-        dts = np.clip([(y - x) for x, y in it.combinations(true_mjds, 2)], dt_bins[0],dt_bins[-1])
-        # fig,ax = plt.subplots(1,2)
-        DMDTs[i],_,_ = np.histogram2d(dms,dts,bins=[dm_bins,dt_bins])
-        DMDTs[i] = np.floor(DMDTs[i]*255/len(dms) + 0.999)  
+#     data['count'] = 1
+#     data['cc'] = data.groupby(['ob_p'])['count'].cumcount()
+#     unstack = data[['ob_p','mjd','flux','cc']].set_index(['ob_p','cc']).unstack()
+#     mjds = unstack['mjd'].values
+#     fluxes = unstack['flux'].values
+#     nan_masks = ~np.isnan(mjds)[:,:]
+#     n_lcs = mjds.shape[0]
+#     DMDTs = np.zeros((n_lcs,len(dm_bins)-1,len(dt_bins)-1))
+#     c=0
+#     for i in range(n_lcs):
+#         true_mjds = mjds[i][nan_masks[i]]
+#         true_fluxes = fluxes[i][nan_masks[i]]
+#         dms = np.clip([(y - x) for x, y in it.combinations(true_fluxes, 2)], dm_bins[0],dm_bins[-1])
+#         dts = np.clip([(y - x) for x, y in it.combinations(true_mjds, 2)], dt_bins[0],dt_bins[-1])
+#         # fig,ax = plt.subplots(1,2)
+#         DMDTs[i],_,_ = np.histogram2d(dms,dts,bins=[dm_bins,dt_bins])
+#         DMDTs[i] = np.floor(DMDTs[i]*255/len(dms) + 0.999)  
     
-    DMDTs_per_band = DMDTs.reshape((n_objs,n_channels,(len(dm_bins)-1),(len(dt_bins)-1)))
-    obj_ids = data.object_id.unique()
-    targets = [plasticc_types.index(tag) for tag in meta_data[meta_data.object_id==obj_ids]['target'].values]
-    print(DMDTs_per_band.shape)
-    return DMDTs_per_band, obj_ids, targets
+#     DMDTs_per_band = DMDTs.reshape((n_objs,n_channels,(len(dm_bins)-1),(len(dt_bins)-1)))
+#     obj_ids = data.object_id.unique()
+#     targets = [plasticc_types.index(tag) for tag in meta_data[meta_data.object_id==obj_ids]['target'].values]
+#     print(DMDTs_per_band.shape)
+#     return DMDTs_per_band, obj_ids, targets
 
 
-def create_DMDTS(data, n_objs,base=10):#fix base so it can be modified, currently it only works with 10
+def create_DMDTS(data, n_objs,base=10,resolution=24):#fix base so it can be modified, currently it only works with 10
     n_channels = 6
     # data = pd.read_csv(data_file)
     data['ob_p']=data.object_id*10+data.passband
@@ -108,11 +108,11 @@ def create_DMDTS(data, n_objs,base=10):#fix base so it can be modified, currentl
     
     max_dt = range_stats['dt']['max']
     max_dt_log = np.log10(max_dt)
-    dt_bins = np.logspace(1,max_dt_log,25,base=base)
+    dt_bins = np.logspace(1,max_dt_log,resolution+1,base=base)
 
     max_dm = range_stats['dm']['max']
     max_dm_log = np.log10(max_dm)
-    dm_bins = np.logspace(0,max_dm_log,12,base=base)
+    dm_bins = np.logspace(0,max_dm_log,int(resolution/2),base=base)
     dm_bins_not = np.sort(dm_bins*(-1))
     dm_bins = np.append(0,dm_bins)
     dm_bins = np.append(dm_bins_not,dm_bins)
@@ -142,7 +142,19 @@ def create_DMDTS(data, n_objs,base=10):#fix base so it can be modified, currentl
 
     return DMDTs_per_band
 
-def create_test_set(metadata_file, data_file_template):
+def create_training_set(meta_data, data, output_fname):
+    n_objs = len(meta_data.object_id.unique())
+    print('creating DMDTs ...')
+    x = create_DMDTS(data, n_objs)
+    print('saving ...')
+    obj_ids = data.object_id.unique()
+    y = [plasticc_types.index(tag) for tag in meta_data[meta_data.object_id==obj_ids]['target'].values]
+    data_set = {'X':x, 'ids':ids, 'Y':y}
+    output_fname = plasticc_processed_data_dir+output_fname+'.h5'
+    save_dmdts(data_set, output_fname)
+    print(output_fname)
+
+def create_test_set(metadata_file, data_file_template, output_fname):
     
     n_file = [n for n in range(2,12)]
     metadata = pd.read_csv(metadata_file)
@@ -162,19 +174,112 @@ def create_test_set(metadata_file, data_file_template):
         print('almost done with {}'.format(i))
         print('saving ...')
         dataset = {'X':x,'ids':obj_ids,'Y':targets}
-        output_fname = plasticc_data_dir+'dmdts_test{}.h5'.format(i)
-        save_dmdts(dataset,output_fname)
+        output_file = plasticc_data_dir+output_fname+'{}.h5'.format(i)
+        save_dmdts(dataset,output_file)
         print('done with {}!'.format(i))
         # break
 
 
+def add_noise(data, metadata, times=0):
+    random_sign = np.random.rand(data.shape[0])
+    random_sign = [1 if r >=0.5 else -1 for r in random_sign]
+    random_scale = np.random.randint(1,6, data.shape[0])
+    random_value = np.random.rand(data.shape[0])
+    random_error = random_value*random_sign*random_scale
+    metadata['random_shift'] = np.random.rand(metadata.shape[0])*np.random.randint(1,100)
+    random_shift = metadata[['object_id','random_shift']]
+    noisy_data = data.copy()
+    noisy_data = noisy_data.merge(random_shift,how='inner')
+    noisy_data['flux_err'] = noisy_data.flux_err*random_error
+    noisy_data['flux'] = noisy_data.flux_err + noisy_data['flux'] 
+    noisy_data['object_id'] = noisy_data.object_id*1000+times
+    # print(data[data.object_id==noisy_data.object_id])
+    noisy_data['mjd'] = noisy_data.mjd + noisy_data.random_shift
+    noisy_data['object_id_p'] = noisy_data.object_id+noisy_data.passband
+    noisy_data = noisy_data.groupby(["object_id_p"]).sample(frac=0.7).sort_index()
+    # degraded = noisy_data.groupby(["object_id"]).sample(frac=0.7).sort_index()
+
+    # noisy_data = noisy_data.groupby(["object_id"]).sample(frac=0.7).sort_index()
+    noisy_data = noisy_data[['object_id', 'mjd', 'passband', 'flux', 'flux_err', 'detected_bool']]
+    print(noisy_data.shape)
+    return(noisy_data)
+
+
+def augment_training_data(data_file, metadata_file):
+    data = pd.read_csv(data_file)
+    print(data.shape)
+    metadata =pd.read_csv(metadata_file)
+    # print(metadata.keys())
+    dfs = [data]
+    mdfs = [metadata]
+    for i in range(0,3):
+        noisy_data = add_noise(data, metadata, times=i)
+        print()
+        dfs.append(noisy_data)
+        new_meta = metadata.copy()
+        new_meta['object_id'] = new_meta['object_id']*10+i
+        mdfs.append(new_meta)
+
+    new_data = pd.concat(dfs, ignore_index=True)
+    new_metadata = pd.concat(mdfs, ignore_index=True)
+    new_data.to_csv(plasticc_data_dir+'plasticc_train_lightcurves_augmented.csv',sep=',',index=False)
+    new_metadata.to_csv(plasticc_data_dir+'plasticc_train_metadata_augmented.csv',sep=',',index=False)
+    print(new_data)
+
+
+def check(metadata_file):
+    metadata =pd.read_csv(metadata_file)
+    ids = metadata.object_id.values
+    unique_ids = metadata.object_id.unique()
+    print(len(ids)== len(unique_ids))
+    ids0 = list(ids*1000)
+    # print(ids0)
+    ids1 = list(ids*1000 + 1)
+    # print(ids1)
+    ids2 = list(ids*1000 +2)
+    # print(ids2)
+    # new_ids = ids0+list(ids)
+    new_ids = ids0+ids1+ids2+list(ids)
+    print(len(new_ids))
+    print(len(set(new_ids)))
+    # print(len(ids)*3)
+
+def create_training_set():
+    train_data_file = plasticc_data_dir+'plasticc_train_lightcurves_augmented.csv'
+    train_metadata_file = plasticc_data_dir+"plasticc_train_metadata_augmented.csv"
+    meta_data = pd.read_csv(train_metadata_file)
+    data = pd.read_csv(train_data_file)
+    obj_ids = data.object_id.unique()
+    print(len(obj_ids))
+    print(len(meta_data.object_id.values))
+    print(data.shape)
+    y = [plasticc_types.index(tag) for tag in meta_data[meta_data.object_id==obj_ids]['target'].values]
+    n_objs = len(meta_data.object_id.unique())
+
+    for resolution in [24, 32, 40, 48, 56, 64]:
+        print('creating DMDTs ... x{}'.format(resolution))
+        x = create_DMDTS(data, n_objs, resolution)
+        print('saving ...')
+        data_set = {'X':x, 'ids':ids, 'Y':y}
+        output_fname = plasticc_processed_data_dir+'dmdts_training_{}x{}_augmented.h5'.format(resolution)
+        save_dmdts(data_set, output_fname)
+        print(output_fname)
+
+
+create_training_set()
+
 
 # create_test_set(test_metadata_file, test_data_file_template)
-x, ids, y = create_training_set(train_metadata_file,train_data_file)
-data_set = {'X':x, 'ids':ids, 'Y':y}
-output_fname = plasticc_processed_data_dir+'dmdts_training_32x32.h5'
-save_dmdts(data_set, output_fname)
-print(output_fname)
+# x, ids, y = create_training_set(train_metadata_file,train_data_file)
+# data_set = {'X':x, 'ids':ids, 'Y':y}
+# output_fname = plasticc_processed_data_dir+'dmdts_training_32x32.h5'
+# save_dmdts(data_set, output_fname)
+# print(output_fname)
 
 
+# train_data_file = plasticc_data_dir+'plasticc_train_lightcurves.csv'
+# train_metadata_file = plasticc_data_dir+"plasticc_train_metadata.csv"
+
+# augment_training_data(train_data_file, train_metadata_file)
+# check(train_metadata_file)
 
