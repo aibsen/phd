@@ -111,7 +111,7 @@ class DMDTCNN(nn.Module):
         if self.params is not None:
             self.in_channels=self.params["input_shape"][0]
             self.img_size = self.params['input_shape'][1]
-            self.n_layers = self.params["n_layers"]
+            # self.n_layers = self.params["n_layers"]
             self.n_filters = self.params["n_filters"]
             self.ks = self.params['kernel_size']
             self.build_module()

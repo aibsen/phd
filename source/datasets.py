@@ -58,6 +58,7 @@ class LCs(Dataset):
                 self.ids = torch.tensor(ids, device = self.device, dtype=torch.int)
                 self.Y = torch.tensor(Y, device = self.device, dtype=torch.long)
                 # self.Y = torch.tensor(Y, dtype=torch.long)
+                print(ids)
         except Exception as e:
             print(e)
 
