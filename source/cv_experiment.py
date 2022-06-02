@@ -39,6 +39,7 @@ class CVExperiment(nn.Module):
         self.best_val_fold = None
         self.best_fold = None
         self.batch_size = self.exp_params['batch_size']
+        self.mean_best_epoch = None
         
         if train_data:
             self.train_length = len(train_data)
@@ -102,8 +103,6 @@ class CVExperiment(nn.Module):
         self.save_fold_statistics("validation_summary.csv")
         self.save_fold_statistics("training_summary.csv") #there's an error here that I don't have time to fix: I'm saving best training stats, but kept last training epoch results.
 
-
-
         #final run of cv experiment??
     def run_final_train_phase(self):
 
@@ -120,6 +119,8 @@ class CVExperiment(nn.Module):
         train_loader = torch.utils.data.DataLoader(self.train_data, batch_size=self.batch_size, shuffle=True)
         start_time = time.time()
         # print(self.mean_best_epoch)
+        if not self.mean_best_epoch:
+            self.mean_best_epoch = self.get_mean_best_epoch()
 
         experiment.run_final_train_phase(data_loaders=[train_loader], n_epochs=self.mean_best_epoch)
         # print("--- %s seconds ---" % (time.time() - start_time))
@@ -136,10 +137,14 @@ class CVExperiment(nn.Module):
 
         test_loader = torch.utils.data.DataLoader(self.test_data, batch_size=self.batch_size, shuffle=True)
         # start_time = time.time()
-        experiment.run_test_phase(data=test_loader,model_idx=self.mean_best_epoch,data_name=test_data_name)
+        experiment.run_test_phase(data=test_loader,data_name=test_data_name)
         # print("--- %s seconds ---" % (time.time() - start_time))
 
 
+    def get_mean_best_epoch(self):
+        val_summary = pd.read_csv(self.experiment_logs+"/"+"validation_summary.csv")
+        best_mean_epoch = val_summary.iloc[0]['mean_epoch']
+        return best_mean_epoch
     # def get_folds_from_folders(self):
     #     rootdir = self.experiment_folds
     #     folds = os.walk(rootdir).__next__()[1]

@@ -55,7 +55,7 @@ class LCs(Dataset):
                 # self.X = torch.tensor(X,dtype=torch.float)
                 self.X = torch.tensor(X, device = self.device, dtype=torch.float)
                 # self.ids = torch.tensor(ids, dtype=torch.int)
-                self.ids = torch.tensor(ids, device = self.device, dtype=torch.int)
+                self.ids = torch.tensor(ids, device = self.device, dtype=torch.long)
                 self.Y = torch.tensor(Y, device = self.device, dtype=torch.long)
                 # self.Y = torch.tensor(Y, dtype=torch.long)
                 print(ids)
