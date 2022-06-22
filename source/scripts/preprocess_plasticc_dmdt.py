@@ -19,7 +19,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from preprocess_data_utils import *
 
 plasticc_data_dir = "../../data/plasticc/csvs/" 
-plasticc_processed_data_dir = "../../data/plasticc/dmdt/" 
+plasticc_processed_data_dir = "../../data/plasticc/dmdt/training/" 
 
 # train_data_file = plasticc_data_dir+'plasticc_train_lightcurves.csv'
 # train_metadata_file = plasticc_data_dir+"plasticc_train_metadata.csv"
@@ -59,6 +59,7 @@ def binning_strategy(code, resolution, min_max):
         dm_bins_not = np.sort(dm_bins*(-1))
         dm_bins = np.append(0,dm_bins)
         dm_bins = np.append(dm_bins_not,dm_bins)
+        print(dm_bins)
 
     elif code[0] == '1':
         max_dm_percentile = min_max.dm.quantile(0.75)
@@ -108,8 +109,26 @@ def binning_strategy(code, resolution, min_max):
             -100,-80,-60,-50,-40,-30,-20,-10,-5,-2,0,2,5,10,20,30,40,50,60,80,
             100,200,300,500,600,800,1000,3000,5000,10000,max_dm]
 
+    elif code[0] == '7':
+        max_dm_log = np.log10(max_dm)
+        dm_bins = np.logspace(1,max_dm_log,int(resolution/2),base=10)
+        dm_bins_not = np.sort(dm_bins*(-1))
+        dm_bins = np.append(0,dm_bins)
+        dm_bins = np.append(dm_bins_not,dm_bins)
+        print(dm_bins)
+
+
+    elif code[0] == '8':
+        max_dm_log = np.log10(max_dm)
+        dm_bins = np.logspace(2,max_dm_log,int(resolution/2),base=10)
+        dm_bins_not = np.sort(dm_bins*(-1))
+        dm_bins = np.append(0,dm_bins)
+        dm_bins = np.append(dm_bins_not,dm_bins)
+
+
     if code[1] == '0':
         dt_bins = np.logspace(0,max_dt_log,resolution+1,base=10)
+        print(dt_bins)
         
     elif code[1] == '1':
         dt_bins = np.logspace(1,max_dt_log,resolution+1,base=10)
@@ -121,6 +140,7 @@ def binning_strategy(code, resolution, min_max):
         max_dt_percentile = min_max.dt.quantile(0.75)
         max_dt_log = np.log10(max_dt_percentile)
         dt_bins = np.logspace(0,max_dt_log,resolution+1,base=10)
+        print(dt_bins)
     elif code[1]=='6':
         dt_bins =  np.arange(0, max_dt,max_dt/41)
 
@@ -228,7 +248,7 @@ def add_noise(data, metadata, times=0):
     #add random noise proportional to the flux error
     random_sign = np.random.rand(noisy_data.shape[0])
     random_sign = [1 if r >=0.5 else -1 for r in random_sign]
-    # random_scale = np.random.randint(1,6, noisy_data.shape[0])
+    random_scale = np.random.randint(1,3, noisy_data.shape[0])
     random_value = np.random.rand(noisy_data.shape[0])
     random_error = random_value*random_sign
     # random_error = random_value*random_sign*random_scale
@@ -350,6 +370,108 @@ def augment_training_data_bit_balanced(data_file,metadata_file):
     # print(data.shape)
     # print(noisy_objects.shape)
 
+def augment_training_data_sorta_balanced(data_file,metadata_file):
+    data = pd.read_csv(data_file)
+    metadata =pd.read_csv(metadata_file)
+    dfs = []
+    mdfs = []
+
+    group_by_target = metadata.groupby('target').count()
+    small_group = list(group_by_target[group_by_target.object_id<300].index)
+    # mid_group = list(group_by_target[(group_by_target.object_id>=300) & (group_by_target.object_id<1000)].index)
+    # bigger_group = list(group_by_target[(group_by_target.object_id>=300) & (group_by_target.object_id<1000)].index)
+    bigger_group = list(group_by_target[group_by_target.object_id>=300].index)
+
+    #for the small group, augment 2 times, keep original
+    small_metadata = metadata.copy()
+    small_metadata = small_metadata[small_metadata.target.isin(small_group)]
+    small_data = data[data.object_id.isin(small_metadata.object_id.unique())]
+    small_dfs = [small_data]
+    small_mdfs = [small_metadata]
+    # print(small_data)
+    print(small_group)
+    for i in range(0,7):
+        small_group_noisy = add_noise(small_data,small_metadata,times=i)
+        new_small_metadata = small_metadata.copy()
+        new_small_metadata['object_id'] = small_metadata['object_id']*1000+i
+        small_dfs.append(small_group_noisy)
+        small_mdfs.append(new_small_metadata)
+    
+    small_dfs = pd.concat(small_dfs).sort_values(by='object_id')
+    small_mdfs = pd.concat(small_mdfs).sort_values(by='object_id')
+    print(len(small_dfs.object_id.unique()))
+    print(len(small_mdfs.object_id.unique()))
+    print(len(small_mdfs.object_id))
+
+    # for mid group, augment twice, keep original
+    # mid_metadata = metadata.copy()
+    # mid_metadata = mid_metadata[mid_metadata.target.isin(mid_group)]
+    # mid_data = data[data.object_id.isin(mid_metadata.object_id.unique())]
+    # mid_dfs = [mid_data]
+    # mid_mdfs = [mid_metadata]
+    # print(mid_group)
+    # for i in range(0,3):
+    #     mid_group_noisy = add_noise(mid_data,mid_metadata,times=i)
+    #     new_mid_metadata = mid_metadata.copy()
+    #     new_mid_metadata['object_id'] = mid_metadata['object_id']*1000+i
+    #     mid_dfs.append(mid_group_noisy)
+    #     mid_mdfs.append(new_mid_metadata)
+    # mid_dfs = pd.concat(mid_dfs).sort_values(by='object_id')
+    # mid_mdfs = pd.concat(mid_mdfs).sort_values(by='object_id')
+    # print(len(mid_dfs.object_id.unique()))
+    # print(len(mid_mdfs.object_id.unique()))
+    # print(len(mid_mdfs.object_id))
+   
+   
+    # for bigger group, augment once, keep original
+    bigger_metadata = metadata.copy()
+    bigger_metadata = bigger_metadata[bigger_metadata.target.isin(bigger_group)]
+    bigger_data = data[data.object_id.isin(bigger_metadata.object_id.unique())]
+    print(bigger_group)
+    bigger_group_noisy = add_noise(bigger_data,bigger_metadata)
+    new_bigger_metadata = bigger_metadata.copy()
+    new_bigger_metadata['object_id'] = bigger_metadata['object_id']*1000
+    bigger_dfs = pd.concat([bigger_data, bigger_group_noisy]).sort_values(by='object_id')
+    bigger_mdfs = pd.concat([bigger_metadata, new_bigger_metadata]).sort_values(by='object_id')
+    print(len(bigger_dfs.object_id.unique()))
+    print(len(bigger_mdfs.object_id.unique()))
+    print(len(bigger_mdfs.object_id))
+    
+    # # for biggest group, augment once
+    # biggest_metadata = metadata.copy()
+    # biggest_metadata = biggest_metadata[biggest_metadata.target.isin(biggest_group)]
+    # biggest_data = data[data.object_id.isin(biggest_metadata.object_id.unique())]
+    # print(biggest_group)
+    # biggest_noisy_group = add_noise(biggest_data,biggest_metadata)
+    # biggest_noisy_group['object_id'] = biggest_noisy_group['object_id']/1000
+    # biggest_noisy_group['object_id'] = biggest_noisy_group['object_id'].astype(int)
+    # biggest_dfs=biggest_noisy_group.sort_values(by='object_id')
+    # biggest_mdfs=biggest_metadata.sort_values(by='object_id')
+    # print(len(biggest_df.object_id.unique()))
+    # print(len(biggest_mdf.object_id.unique()))
+    # print(len(biggest_mdf.object_id))
+
+    all_data = pd.concat([small_dfs,bigger_dfs]).sort_values(by='object_id')
+    all_metadata = pd.concat([small_mdfs,bigger_mdfs]).sort_values(by='object_id')
+
+    # print(all_data.shape[0])
+    # print(all_metadata.shape[0])
+    # print(len(all_metadata.object_id.unique())==len(all_data.object_id.unique()) and len(all_metadata.object_id.unique())==len(all_metadata.object_id))
+
+    all_data.to_csv(plasticc_data_dir+'plasticc_train_lightcurves_augmented_noise7.csv',sep=',',index=False)
+    all_metadata.to_csv(plasticc_data_dir+'plasticc_train_metadata_augmented_noise7.csv',sep=',',index=False)
+
+    # targets_to_augment = list(group_by_target[group_by_target.object_id<300].index)
+    # meta_objects_to_augment = metadata[metadata.target.isin(targets_to_augment)]
+    # ids_to_augment = meta_objects_to_augment.object_id.unique()
+    # objects_to_augment = data[data.object_id.isin(ids_to_augment)]
+    # noisy_objects = add_noise(objects_to_augment,meta_objects_to_augment)
+
+    # print(objects_to_augment.shape)
+    # print(data.shape)
+    # print(noisy_objects.shape)
+
+
 def augment_training_data(data_file, metadata_file):
     data = pd.read_csv(data_file)
     print(data.shape)
@@ -424,9 +546,9 @@ def check(metadata_file):
 
 def create_training_set(code='00'):
     # train_data_file = plasticc_data_dir+'plasticc_train_lightcurves.csv'
-    train_data_file = plasticc_data_dir+'plasticc_train_lightcurves_augmented_noise3.csv'
+    train_data_file = plasticc_data_dir+'plasticc_train_lightcurves_augmented_noise4.csv'
     # train_metadata_file = plasticc_data_dir+"plasticc_train_metadata.csv"
-    train_metadata_file = plasticc_data_dir+"plasticc_train_metadata_augmented_noise3.csv"
+    train_metadata_file = plasticc_data_dir+"plasticc_train_metadata_augmented_noise4.csv"
     meta_data = pd.read_csv(train_metadata_file)
     data = pd.read_csv(train_data_file)
     obj_ids = data.object_id.unique()
@@ -434,24 +556,29 @@ def create_training_set(code='00'):
     n_objs = len(meta_data.object_id.unique())
     print(y[10000:10010])
     print(meta_data.iloc[10000:10010].target)
-    for resolution in [24,32,40]:
+    for resolution in [24,32]:
         print('creating DMDTs ... x{}'.format(resolution))
         x = create_DMDTS(data, n_objs, resolution=resolution, binning_strategy_code=code)
         print('saving ...')
         data_set = {'X':x, 'ids':obj_ids, 'Y':y}
-        output_fname = plasticc_processed_data_dir+'dmdts_training_{}x{}_b{}augmented_noise3.h5'.format(resolution,resolution,code)
+        output_fname = plasticc_processed_data_dir+'dmdts_training_{}x{}_b{}augmented_noise4.h5'.format(resolution,resolution,code)
         save_dmdts(data_set, output_fname)
         print(output_fname)
-        # break
+        # # break
 
-# for code in ['00']:
-    # create_training_set(code)
+
+
+train_data_file = plasticc_data_dir+'plasticc_train_lightcurves.csv'
+train_metadata_file = plasticc_data_dir+"plasticc_train_metadata.csv"
+# augment_training_data_sorta_balanced(train_data_file,train_metadata_file)
+for code in ['03', '70','73']:
+    create_training_set(code)
 
 # test_metadata_file
-for resolution in [24]:
-    code = '00'
-    output_fname = 'dmdts_test_{}x{}_b{}_'.format(resolution,resolution,code)
-    create_test_set(test_metadata_file, test_data_file_template,output_fname,code)
+# for resolution in [24]:
+    # code = '00'
+    # output_fname = 'dmdts_test_{}x{}_b{}_'.format(resolution,resolution,code)
+    # create_test_set(test_metadata_file, test_data_file_template,output_fname,code)
 # x, ids, y = create_training_set(train_metadata_file,train_data_file)
 # data_set = {'X':x, 'ids':ids, 'Y':y}
 # output_fname = plasticc_processed_data_dir+'dmdts_training_32x32.h5'
@@ -459,8 +586,7 @@ for resolution in [24]:
 # print(output_fname)
 
 
-# train_data_file = plasticc_data_dir+'plasticc_train_lightcurves.csv'
-# train_metadata_file = plasticc_data_dir+"plasticc_train_metadata.csv"
+
 # data = pd.read_csv(train_data_file)
 # metadata =pd.read_csv(train_metadata_file)
 
@@ -471,4 +597,13 @@ for resolution in [24]:
 # check(train_metadata_file)
 # 
 # augment_training_data_bit_balanced(train_data_file,train_metadata_file)
+
 # 
+
+# train_metadata_file = plasticc_data_dir+"plasticc_train_metadata_augmented_noise2.csv"
+# metadata = pd.read_csv(train_metadata_file)
+# n_objs = len(metadata.object_id.unique())
+# print(n_objs)
+# objs_per_class
+
+# train_metadata_file = plasticc_data_dir+"plasticc_train_metadata_augmented_noise3.csv"

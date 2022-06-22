@@ -15,6 +15,9 @@ from data_samplers import CachedRandomSampler
 from dataset_utils import cached_crossvalidator_split
 from experiment import Experiment
 from utils import find_best_epoch
+from plot_utils import *
+from sklearn.metrics import f1_score, accuracy_score
+
 import pandas as pd
 
 class CVExperiment(nn.Module):
@@ -38,7 +41,7 @@ class CVExperiment(nn.Module):
         self.test_data = test_data
         self.best_val_fold = None
         self.best_fold = None
-        self.batch_size = self.exp_params['batch_size']
+        # self.batch_size = self.exp_params['batch_size']
         self.mean_best_epoch = None
         
         if train_data:
@@ -145,6 +148,65 @@ class CVExperiment(nn.Module):
         val_summary = pd.read_csv(self.experiment_logs+"/"+"validation_summary.csv")
         best_mean_epoch = val_summary.iloc[0]['mean_epoch']
         return best_mean_epoch
+
+    def get_fold_results(self, fold):
+        fold_dir = self.experiment_folds+"/fold_k{}/result_outputs/".format(fold)
+        results_path = fold_dir+"validation_results.csv"
+        results = pd.read_csv(results_path)
+        predictions = results.prediction
+        targets = results.target
+        return predictions.values,targets.values
+
+    def save_best_fold_results_acc(self, plot=True):
+        cum_acc_scores = []
+
+        for fold in range(1,self.k+1):
+            predictions, targets = self.get_fold_results(fold)
+            cum_acc_scores.append(accuracy_score(targets,predictions))
+
+        best_acc = {}
+        best_fold_idx = cum_acc_scores.index(np.max(cum_acc_scores))
+        best_acc['fold']=best_fold_idx+1
+        best_acc['accuracy']=cum_acc_scores[best_fold_idx]
+            
+        best_acc_scores = pd.DataFrame(best_acc, index = [0])
+        best_acc_scores.to_csv(self.experiment_logs+"/"+"best_acc_scores.csv",index=False)
+
+    def save_best_fold_results_f1(self, plot=True):
+        reduction = ["micro","macro","weighted"]
+        cum_f1_scores = {r:[] for r in reduction}
+
+        for fold in range(1,self.k+1):
+            predictions, targets = self.get_fold_results(fold)
+            fold_dir = self.experiment_folds+"/fold_k{}/result_outputs/".format(fold)
+            f1_scores = {r:f1_score(targets,predictions,average=r) for r in reduction}
+            f1_scores_df = pd.DataFrame(f1_scores, index=[0])
+            f1_scores_df.to_csv(fold_dir+"f1_scores.csv",index=False)
+            for r in reduction:
+                cum_f1_scores[r].append(f1_scores[r])
+        
+        avg_f1_scores = {r:np.mean(cum_f1_scores[r]) for r in cum_f1_scores}
+        avg_f1_scores_df = pd.DataFrame(avg_f1_scores, index =[0])
+        avg_f1_scores_df.to_csv(self.experiment_logs+"/"+"mean_f1_scores.csv",index=False)
+
+        best_f1_per_reduction = {r:[] for r in ['reduction','fold']+reduction}
+        for r in reduction:
+            best_fold_idx = cum_f1_scores[r].index(np.max(cum_f1_scores[r]))
+            best_f1_per_reduction['reduction'].append(r)
+            best_f1_per_reduction['fold'].append(best_fold_idx+1)
+            for red in reduction:
+                best_f1_per_reduction[red].append(cum_f1_scores[red][best_fold_idx])
+            
+            if plot: 
+                self.save_result_plots(self.experiment_logs,fold=best_fold_idx+1,plot_name="best_cm_{}_fold_{}.png".format(r,best_fold_idx+1)) 
+        best_f1_scores = pd.DataFrame(best_f1_per_reduction)
+        best_f1_scores.to_csv(self.experiment_logs+"/"+"best_f1_scores.csv")
+                     
+    def save_result_plots(self,save_dir,fold,plot_name="best_cm.png"):
+        save_path = save_dir+"/"+plot_name
+        predictions, targets = self.get_fold_results(fold)
+        plot_best_val_cm(targets,predictions, save=True,verbose=False, output_file=save_path)
+
     # def get_folds_from_folders(self):
     #     rootdir = self.experiment_folds
     #     folds = os.walk(rootdir).__next__()[1]

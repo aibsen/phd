@@ -109,23 +109,36 @@ class SeededExperiment(nn.Module):
         subdirs = filter(lambda s: True if 'seed' in s else False, subdirs) 
         return list(map(lambda s: s.split("_")[1],subdirs))
 
-    def get_best_validation_results(self):
-    #returns the classification results for best iteration
-        seeds = self.get_seeds_from_folders()     
-        best_seed = -1
-        best_k = -1
-        best_results = -1
+    def save_best_fold_results(self):
+        seeds = self.seeds if self.seeds else self.get_seeds_from_folders()
         for seed in seeds:
             exp_name = self.experiment_folder+"/seed_"+str(seed)
-            cve = CVExperiment(exp_name)
-            k, new_best_results = cve.get_best_fold(summary_filename)
-            if new_best_results > best_results:
-                best_k = k
-                new_best_results = best_results
-                best_seed = seed
-        r_file = self.experiment_folder+"/seed_"+str(best_seed)+"/folds/fold_k"+str(best_k)+"/result_outputs/"+results_filename
-        # results = pd.read_csv(r_file)
-        return seed, k, r_file
+            cve = CVExperiment(exp_name, k = self.k)
+            cve.save_best_fold_results_f1()
+
+    def save_best_fold_results_acc(self):
+        seeds = self.seeds if self.seeds else self.get_seeds_from_folders()
+        for seed in seeds:
+            exp_name = self.experiment_folder+"/seed_"+str(seed)
+            cve = CVExperiment(exp_name, k = self.k)
+            cve.save_best_fold_results_acc()
+    # def get_best_validation_results(self):
+    # #returns the classification results for best iteration
+    #     seeds = self.get_seeds_from_folders()     
+    #     best_seed = -1
+    #     best_k = -1
+    #     best_results = -1
+    #     for seed in seeds:
+    #         exp_name = self.experiment_folder+"/seed_"+str(seed)
+    #         cve = CVExperiment(exp_name)
+    #         k, new_best_results = cve.get_best_fold(summary_filename)
+    #         if new_best_results > best_results:
+    #             best_k = k
+    #             new_best_results = best_results
+    #             best_seed = seed
+    #     r_file = self.experiment_folder+"/seed_"+str(best_seed)+"/folds/fold_k"+str(best_k)+"/result_outputs/"+results_filename
+    #     # results = pd.read_csv(r_file)
+    #     return seed, k, r_file
 
     # def get_all_metrics(self,metric="f1",summary_filename="test_summary.csv"):
     # #given a metric it goes through all exp folders and gets the relevant metric

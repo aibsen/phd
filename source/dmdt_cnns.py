@@ -77,9 +77,9 @@ class DMDTShallowCNN(nn.Module):
         self.layer_dict['conv'] = nn.Conv2d(in_channels=self.in_channels,out_channels=self.n_filters,kernel_size=self.ks)
         #lambda to calculate output size f convolutional blocks
         out_f = int((self.img_size-(self.ks-1)))
-        print(out_f)
+        # print(out_f)
         input_linear = self.n_filters*((out_f)**2)
-        print(input_linear)
+        # print(input_linear)
         self.layer_dict["linear_0"] = nn.Linear(in_features=input_linear,out_features=128)
         self.layer_dict["linear_1"] = nn.Linear(in_features=128,out_features=14)
 

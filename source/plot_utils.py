@@ -7,10 +7,27 @@ from sklearn.metrics import confusion_matrix
 import os, sys
 import scipy.stats as stats
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from seeded_experiment import SeededExperiment
+# from seeded_experiment import SeededExperiment
 
 
 np.set_printoptions(threshold=np.inf)
+plasticc_type_dict = {
+    '90':'SN-Ia',
+    '67':'SN-Ia-91BG', 
+    '52':'SN-Iax',  
+    '42':'SN-II', 
+    '62':'SN-Ib/c',
+    '95':'SLSN',
+    '15':'TDE',
+    '64':'KN',
+    '88':'AGN',
+    '92':'RRL',
+    '65':'M-dwarf',
+    '16':'EB',
+    '53':'Mira',
+    '6':'uLens-Single',
+}
+plasticc_names = [plasticc_type_dict[k] for k in plasticc_type_dict]
 
 def make_colormap_from_color(color):
     """Return a LinearSegmentedColormap
@@ -255,6 +272,49 @@ def plot_cm(ax,true_targets, predictions, normalized=True,colormap=None):
     ax.set_yticklabels([''] + names)
     ax.set_xlabel("predicted class")
     ax.set_ylabel("true class")
+
+def plot_best_val_cm(target, prediction, normalized=True, colormap=None, names=plasticc_names,verbose=False, save=False, output_file=None):
+    fig,ax = plt.subplots(1,1)
+    cm=confusion_matrix(target,prediction)
+    if normalized:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+    if colormap is not None:
+        im = ax.imshow(cm, interpolation= 'nearest', cmap=colormap)
+    else : 
+        im = ax.imshow(cm, interpolation= 'nearest', cmap=plt.cm.BuPu)
+    fmt ='.2f'
+    thresh = cm.max() / 2.
+    for i in range(cm.shape[0]):
+        for j in range(cm.shape[1]):
+            if normalized:
+                ax.text(j, i, format(cm[i, j], fmt),
+                    ha="center", va="center",
+                    color="white" if cm[i, j] > thresh else "black")
+            else :
+                ax.text(j, i, format(cm[i, j]),
+                    ha="center", va="center",
+                    color="white" if cm[i, j] > thresh else "black")
+    ax.set_xticks(range(0,len(names)))
+    ax.set_yticks(range(0,len(names)))
+    ax.set_xticklabels(names)
+    ax.set_yticklabels(names)
+    ax.set_xlabel("Predicted class")
+    ax.set_ylabel("True class")
+
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right",
+         rotation_mode="anchor")
+    # print(names)
+    fig.set_figheight(10)
+    fig.set_figwidth(10)
+    # fig.figsize(100,100)
+
+    if verbose:
+        plt.show()
+    
+    if save and output_file:
+        plt.savefig(output_file)
+    elif save:
+        print("Need output_file argument")
 
 def plot_best_cms(results_dir = "../../results/",exp=2,part=1,count=3):
     
