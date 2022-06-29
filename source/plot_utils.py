@@ -306,12 +306,16 @@ def plot_best_val_cm(target, prediction, normalized=True, colormap=None, names=p
     # print(names)
     fig.set_figheight(10)
     fig.set_figwidth(10)
+    fig.set_dpi(100)
     # fig.figsize(100,100)
-
+    # size = fig.get_size_inches()
+    # print(size)
     if verbose:
         plt.show()
     
     if save and output_file:
+        # print(size)
+        # print(fig.dpi)
         plt.savefig(output_file)
     elif save:
         print("Need output_file argument")

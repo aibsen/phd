@@ -102,6 +102,42 @@ class SeededExperiment(nn.Module):
 
         if self.verbose:
             print("--- %s seconds ---" % (time.time() - start_time))
+
+    def run_final_train_phase(self):
+
+        experiment = Experiment(
+            network_model = self.exp_params["network_model"],
+            experiment_name = self.experiment_folder,
+            num_epochs = self.exp_params["num_epochs"],
+            learning_rate = self.exp_params["learning_rate"],
+            weight_decay_coefficient = self.exp_params["weight_decay_coefficient"],
+            batch_size = self.exp_params["batch_size"],
+            num_output_classes=self.exp_params["num_output_classes"],
+        )
+
+        train_loader = torch.utils.data.DataLoader(self.train_data, batch_size=self.batch_size, shuffle=True)
+        start_time = time.time()
+        experiment.run_final_train_phase(data_loaders=[train_loader], n_epochs=self.exp_params["num_epochs"])
+        print("--- %s seconds ---" % (time.time() - start_time))
+
+    # def run_test_phase(self):
+        
+    #     experiment = Experiment(
+    #         network_model = self.exp_params["network_model"],
+    #         experiment_name = self.experiment_folder,
+    #         num_epochs = self.exp_params["num_epochs"],
+    #         learning_rate = self.exp_params["learning_rate"],
+    #         weight_decay_coefficient = self.exp_params["weight_decay_coefficient"],
+    #         batch_size = self.exp_params["batch_size"],
+    #         num_output_classes=self.exp_params["num_output_classes"],
+    #     )
+        
+    #     test_loader = torch.utils.data.DataLoader(self.tes6_data, batch_size=self.batch_size, shuffle=False)
+        
+    #     if self.chunked == True:
+    #         experiment.load_model()
+    #         experiment.run_test_phase(test_loader, load_model=False)
+
     
     def get_seeds_from_folders(self):
         rootdir = self.experiment_folder

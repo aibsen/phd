@@ -198,7 +198,8 @@ class CVExperiment(nn.Module):
                 best_f1_per_reduction[red].append(cum_f1_scores[red][best_fold_idx])
             
             if plot: 
-                self.save_result_plots(self.experiment_logs,fold=best_fold_idx+1,plot_name="best_cm_{}_fold_{}.png".format(r,best_fold_idx+1)) 
+                self.save_result_plots(self.experiment_logs,fold=best_fold_idx+1,plot_name="best_cm_{}_fold_{}.png".format(r,best_fold_idx+1))
+                print(r) 
         best_f1_scores = pd.DataFrame(best_f1_per_reduction)
         best_f1_scores.to_csv(self.experiment_logs+"/"+"best_f1_scores.csv")
                      

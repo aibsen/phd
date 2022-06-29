@@ -64,14 +64,14 @@ class Experiment(nn.Module):
             if train_sampler is not None:
                 train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, sampler=train_sampler)
             else:
-                train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=False)
+                train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=True)
             self.train_data = train_loader
 
         if val_data:
             if val_sampler is not None:
                 val_loader = torch.utils.data.DataLoader(val_data,batch_size=batch_size,sampler=val_sampler)
             else:
-                val_loader = torch.utils.data.DataLoader(val_data, batch_size=batch_size, shuffle=False)
+                val_loader = torch.utils.data.DataLoader(val_data, batch_size=batch_size, shuffle=True)
             self.val_data = val_loader
 
         if test_data:
@@ -152,10 +152,11 @@ class Experiment(nn.Module):
         results_df.to_csv(self.experiment_logs+'/'+fn,sep=',',index=False)
 
     
-    def run_test_phase(self, data=None, model_name="final_model",data_name="test"):
+    def run_test_phase(self, data=None, model_name="final_model.pth.tar",data_name="test",load_model=True):
         start_time = time.time()
         data = data if data else self.test_data
-        self.load_model(model_save_dir=self.experiment_saved_models, model_save_name=model_name)
+        if load_model:
+            self.load_model(model_save_dir=self.experiment_saved_models, model_save_name=model_name)
         results_cm = torch.zeros((len(data.dataset),3), dtype=torch.int64, device = self.device) # holds ids, preds, targets
         running_loss = 0.0
         
