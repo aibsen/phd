@@ -15,7 +15,6 @@ from preprocess_data_utils import *
 import time
 import math
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from preprocess_data_utils import *
 
 plasticc_data_dir = "../../data/plasticc/csvs/" 
