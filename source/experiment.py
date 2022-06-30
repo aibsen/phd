@@ -117,9 +117,11 @@ class Experiment(nn.Module):
         self.eval()  # sets the system to validation mode
         out = self.model.forward(x)  # forward the data in the model
         loss =  self.criterion(out,y)
-        predicted = F.softmax(out.data,dim=1)
-        predicted = torch.argmax(predicted, 1)
-        return loss, predicted
+        predicted_soft = F.softmax(F.softmax(out.data,dim=1),dim=1)
+        # print(predicted_soft)
+        # print(predicted_soft.shape)
+        predicted = torch.argmax(predicted_soft, 1)
+        return loss, predicted, predicted_soft
 
     def save_model(self, model_save_name):
         save_path = os.path.join(self.experiment_saved_models, model_save_name)
@@ -145,25 +147,33 @@ class Experiment(nn.Module):
         stats_df = stats_df[stats_df.epoch>=0]
         stats_df.epoch = stats_df.epoch.astype(int)
         stats_df.to_csv(self.experiment_logs+'/'+fn ,sep=',',index=False)
-
+    
     def save_results(self, results, fn):
         results_keys = ['object_id','prediction','target']
         results_df = pd.DataFrame(results.cpu().numpy(), columns=results_keys)
         results_df.to_csv(self.experiment_logs+'/'+fn,sep=',',index=False)
 
-    
+    def save_probabilities(self, results, fn):
+        results_keys = ['object_id']+[str(i) for i in range (self.num_output_classes)]
+        results_df = pd.DataFrame(results.cpu().numpy(), columns=results_keys)
+        results_df['object_id'] = results_df['object_id'].astype('int64')
+        results_df.to_csv(self.experiment_logs+'/'+fn,sep=',',index=False)
+
+
     def run_test_phase(self, data=None, model_name="final_model.pth.tar",data_name="test",load_model=True):
         start_time = time.time()
         data = data if data else self.test_data
         if load_model:
             self.load_model(model_save_dir=self.experiment_saved_models, model_save_name=model_name)
         results_cm = torch.zeros((len(data.dataset),3), dtype=torch.int64, device = self.device) # holds ids, preds, targets
+        results_probs = torch.zeros((len(data.dataset),self.num_output_classes+1), dtype=torch.double, device = self.device) # holds ids, probability predictions
         running_loss = 0.0
         
         with tqdm.tqdm(total=len(data)) as pbar:
             for i,(x, y, ids) in enumerate(data):
-                loss, preds = self.run_evaluation_iter(x=x,y=y)
+                loss, preds, preds_soft = self.run_evaluation_iter(x=x,y=y)
                 torch.stack((ids,preds,y),dim=1,out=results_cm[i*self.batch_size])
+                torch.cat((torch.unsqueeze(ids,1),preds_soft), dim=1, out=results_probs[i*self.batch_size])
                 running_loss += loss.item()
                 pbar.update(1)
                 elapsed_time = time.time() - start_time 
@@ -181,10 +191,12 @@ class Experiment(nn.Module):
         test_stats[0,4] = precision # precision
         test_stats[0,5] = recall #recall
 
+        self.save_probabilities(results_probs, data_name+"_probabilities.csv")
         self.save_statistics(test_stats, data_name+"_summary.csv")
         self.save_results(results_cm, data_name+"_results.csv")
 
-    def run_final_train_phase(self, data_loaders=None,n_epochs=None, model_name="final_model.pth.tar"):
+    def run_final_train_phase(self, data_loaders=None,n_epochs=None, model_name="final_model.pth.tar", data_name = 'final_training'):
+        print(self.num_output_classes)
         start_time = time.time()
         n_epochs = n_epochs if n_epochs else self.best_epoch
         data_loaders = data_loaders if data_loaders else [self.train_data,self.val_data]
@@ -227,8 +239,8 @@ class Experiment(nn.Module):
                 elapsed_time = time.time() - start_time  
                 pbar_train.set_description("Train loss: {:.3f}       , ET {:.2f}s".format(train_loss,elapsed_time))
                 
-        self.save_statistics(train_stats, 'final_training_summary.csv')
-        self.save_results(last_train_cm, 'final_training_results.csv')
+        self.save_statistics(train_stats, '{}_summary.csv'.format(data_name))
+        self.save_results(last_train_cm, '{}_results.csv'.format(data_name))
         self.state = {
             'epoch': n_epochs,
             'model': self.model.state_dict(),
@@ -284,7 +296,7 @@ class Experiment(nn.Module):
                     running_val_loss = 0.0
 
                     for idx, (x, y, ids) in enumerate(self.val_data):
-                        loss, preds = self.run_evaluation_iter(x=x, y=y)
+                        loss, preds, _ = self.run_evaluation_iter(x=x, y=y)
                         running_val_loss += loss.item()
                         torch.stack((ids,preds,y),dim=1,out=current_val_cm[idx*self.batch_size])
 
