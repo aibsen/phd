@@ -72,8 +72,7 @@ class RandomCropsZeroPad(object):
 
 
 class CastClass(object):
-
-    def __init__(initial_class,final_class):
+    def __init__(self,initial_class,final_class):
         self.initial_class = initial_class
         self.final_class = final_class
 
@@ -81,4 +80,15 @@ class CastClass(object):
         X,Y,obid=sample
         if Y == self.initial_class:
             Y=self.final_class
+        return X,Y,obid
+
+class GroupClass(object):
+    def __init__(self,initial_class,final_class):
+        self.initial_class = initial_class
+        self.final_class = final_class
+
+    def __call__(self,sample):
+        X,Y,obid=sample
+        if Y >= self.initial_class:
+            Y=torch.tensor(self.final_class,device=Y.device)
         return X,Y,obid
