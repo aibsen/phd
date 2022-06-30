@@ -35,11 +35,17 @@ class LCs(Dataset):
 
     def __getitem__(self, idx):
 
-        # if self.X is None:
-        #     self.load_data_into_memory()
-        # sample = self.X[idx],self.Y[idx], self.ids[idx]
-        # if self.transform:
-        #     return self.transform(sample)
+        if self.X is None:
+            self.load_data_into_memory()
+        
+        if self.transform:
+            # print(sample.shape)
+            sample = self.X[idx],self.Y[idx], self.ids[idx]
+            X,Y,ids = self.transform(sample)
+            # print(X.shape)
+            # print(Y)
+            # print(ids)
+            return X,Y,ids
         # else:
         return self.X[idx],self.Y[idx], self.ids[idx]
 
@@ -58,7 +64,7 @@ class LCs(Dataset):
                 self.ids = torch.tensor(ids, device = self.device, dtype=torch.long)
                 self.Y = torch.tensor(Y, device = self.device, dtype=torch.long)
                 # self.Y = torch.tensor(Y, dtype=torch.long)
-                print(ids)
+                # print(ids)
         except Exception as e:
             print(e)
 
