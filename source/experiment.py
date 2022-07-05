@@ -117,7 +117,8 @@ class Experiment(nn.Module):
         self.eval()  # sets the system to validation mode
         out = self.model.forward(x)  # forward the data in the model
         loss =  self.criterion(out,y)
-        predicted_soft = F.softmax(F.softmax(out.data,dim=1),dim=1)
+        predicted_soft = F.softmax(out.data,dim=1)
+        # predicted_soft = F.softmax(F.softmax(out.data,dim=1),dim=1)
         # print(predicted_soft)
         # print(predicted_soft.shape)
         predicted = torch.argmax(predicted_soft, 1)

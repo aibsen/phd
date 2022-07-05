@@ -7,25 +7,26 @@ from plot_utils import *
 results_dir = "../../results/"
 exp_name = '2_24x24final'
 where = results_dir+exp_name+'/result_outputs/'
+run_number = '2'
 
 def merge_files():
     predictions = []
     probabilities = []
     
     for i in range(1,12):
-        predictions_fn = where+'test_{}_tame_results.csv'.format(i)
+        predictions_fn = where+'test_{}_{}_results.csv'.format(i,run_number)
         pred = pd.read_csv(predictions_fn)
         predictions.append(pred)
         
-        probabilities_fn = where+'test_{}_tame_probabilities.csv'.format(i)
+        probabilities_fn = where+'test_{}_{}_probabilities.csv'.format(i,run_number)
         prob = pd.read_csv(probabilities_fn)
         probabilities.append(prob)
         
     all_predictions = pd.concat(predictions, axis=0, ignore_index=True)
-    all_predictions.to_csv(where+"all_test_results_tame.csv",sep=',',index=False)
+    all_predictions.to_csv(where+"all_test_results_{}.csv".format(run_number),sep=',',index=False)
 
     all_probabilities = pd.concat(probabilities, axis=0, ignore_index=True)
-    all_probabilities.to_csv(where+"all_test_probabilities_tame.csv",sep=',',index=False)
+    all_probabilities.to_csv(where+"all_test_probabilities_{}.csv".format(run_number),sep=',',index=False)
 
 
 def overall_summary(csv_results,csv_probabilities):
@@ -38,16 +39,18 @@ def overall_summary(csv_results,csv_probabilities):
     f1_macro = f1_score(targets, predictions, average='macro')
     f1_no_99 = f1_score(targets, predictions,labels=range(0,14), average='macro') # 0.3506195828251394
     f1_sn = f1_score(targets, predictions, labels=range(0,6),average='macro') #0.1966493728416829
+    #no 99 f1: 0.354, sn only: 0.2123
     print("f1 : "+str(f1_macro))
     print("f1 without 99 : "+str(f1_no_99))
     print("f1 sn only : "+str(f1_sn)) 
 
     accuracy = accuracy_score(targets, predictions)
-    print("accuracy : "+str(accuracy))
+    print("accuracy : "+str(accuracy)) #no 99 0.572
 
     precision = precision_score(targets, predictions,average='micro')
     recall = recall_score(targets, predictions,average='micro')
 
+    # weight_code = [1,1,1,1,1,1,2,2,1,1,1,1,1,1]
     weight_code = [1,1,1,1,1,1,2,2,1,1,1,1,1,1,2]
     weights = [weight_code[i] for i in targets.values] 
     # print(probabilities.values.shape)
@@ -63,7 +66,7 @@ def overall_summary(csv_results,csv_probabilities):
     # print("loss without 99: "+str(loss_no_99))
 
     metrics = pd.DataFrame({'accuracy': accuracy, 'loss':loss,"f1":f1_macro, "precision":precision, "recall": recall},index=[0])
-    metrics.to_csv(where+"all_summary_dramatic.csv",index=False)
+    metrics.to_csv(where+"all_summary_test_{}.csv".format(run_number),index=False)
 
 def overall_cm(csv_results,output_name):
     out = where+output_name
@@ -106,6 +109,6 @@ def probs_to_plasticc_format(csv_probs):
     probabilities.to_csv(where+'all_test_probabilities_plasticc_tame.csv',index=False)
 
 # merge_files()
-# overall_summary('all_test_results_dramatic.csv','all_test_probabilities_dramatic.csv')
-# overall_cm('all_test_results_dramatic.csv','all_cm_dramatic.png')
-probs_to_plasticc_format('all_test_probabilities_tame.csv')
+overall_summary('all_test_results_{}_14.csv'.format(run_number),'all_test_probabilities_{}_14.csv'.format(run_number))
+overall_cm('all_test_results_{}_14.csv'.format(run_number),'all_cm_{}_14.png'.format(run_number))
+# probs_to_plasticc_format('all_test_probabilities_tame.csv')

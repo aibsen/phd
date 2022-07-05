@@ -27,6 +27,7 @@ arch_code = 2
 # noise_code = [4,5,6,7]
 noise = 4
 b_code = '00'
+run_number = '3'
 
 results_dir = "../../results/"
 data_dir_training = "/home/ai/phd/data/plasticc/dmdt/training/"
@@ -34,7 +35,7 @@ data_dir_test = "/home/ai/phd/data/plasticc/dmdt/test/"
 
 # exp_name = results_dir+"dummy"
 
-batch_size = 32
+batch_size = 64
 num_epochs = 60
 use_gpu = True
 lr = 1e-04
@@ -61,25 +62,25 @@ drop_out_linear = 0.25
 out_linear = 128
 
 exp_name = results_dir+"{}_{}x{}final".format(arch_code,lc_length,lc_length)
-# training_data_file=data_dir_training+'dmdts_training_{}x{}_b{}augmented_noise{}.h5'.format(lc_length,lc_length,b_code,noise)
-# print(training_data_file)
-# train_dataset = LCs(lc_length,training_data_file,n_channels=6)
-# train_dataset.load_data_into_memory()
+training_data_file=data_dir_training+'dmdts_training_{}x{}_b{}augmented_noise{}.h5'.format(lc_length,lc_length,b_code,noise)
+print(training_data_file)
+train_dataset = LCs(lc_length,training_data_file,n_channels=6)
+train_dataset.load_data_into_memory()
 input_shape = torch.Size([6, 24, 24])
 
 
 def run_test_batch(experiment,i):
-    test_data_file=data_dir_test+'dmdts_test_{}x{}_b{}{}_no99.h5'.format(lc_length,lc_length,b_code,i)
-    # test_data_file=data_dir_test+'dmdts_test_{}x{}_b{}_{}.h5'.format(lc_length,lc_length,b_code,i)
+    # test_data_file=data_dir_test+'dmdts_test_{}x{}_b{}{}.h5'.format(lc_length,lc_length,b_code,i)
+    test_data_file=data_dir_test+'dmdts_test_{}x{}_b{}_{}.h5'.format(lc_length,lc_length,b_code,i)
     print(test_data_file)
-    test_dataset = LCs(lc_length,test_data_file,n_channels=6)
-    # test_dataset = LCs(lc_length,test_data_file,n_channels=6, transform=transform)
+    # test_dataset = LCs(lc_length,test_data_file,n_channels=6)
+    test_dataset = LCs(lc_length,test_data_file,n_channels=6, transform=transform)
     print("loading dataset")
     test_dataset.load_data_into_memory()
     print(torch.cuda.mem_get_info(device=None))
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
     experiment.test_data = test_loader
-    experiment.run_test_phase(test_loader, load_model=False, data_name="test_{}_no99_tame".format(i))
+    experiment.run_test_phase(test_loader, load_model=False, data_name="test_{}_{}".format(i,run_number))
     print(torch.cuda.mem_get_info(device=None))
     print("releasing cache")
     del test_dataset
@@ -129,12 +130,12 @@ experiment = Experiment(
 )
 
 train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-experiment.run_final_train_phase([train_loader],data_name='final_training_no_99', model_name="final_model_no_99.pth.tar")
+experiment.run_final_train_phase([train_loader],data_name='final_training_{}'.format(run_number), model_name="final_model_{}.pth.tar".format(run_number))
 print(torch.cuda.mem_get_info(device=None))
 print("loading model")
-experiment.load_model(exp_name+"/saved_models","final_model_no_99.pth.tar")
+experiment.load_model(exp_name+"/saved_models","final_model_{}.pth.tar".format(run_number))
 print(torch.cuda.mem_get_info(device=None))
-# transform = GroupClass(14,14)
+transform = GroupClass(14,14)
 
 for i in range(1,12):
     run_test_batch(experiment,i)
