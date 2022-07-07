@@ -194,7 +194,7 @@ def create_DMDTS(data, n_objs,base=10,resolution=24, binning_strategy_code='00')
 
 def create_test_set(metadata_file, data_file_template, output_fname, code='00'):
     
-    n_file = [n for n in range(4,12)]
+    n_file = [n for n in range(1,12)]
     metadata = pd.read_csv(metadata_file)
     print('\n{:,.0f} total objects in test set'.format(len(metadata.object_id.unique())))
     
@@ -207,7 +207,7 @@ def create_test_set(metadata_file, data_file_template, output_fname, code='00'):
         obj_ids = data.object_id.unique()
         n_objs = len(obj_ids)
         relevant = metadata[metadata.object_id.isin(obj_ids)]
-        relevant = relevant[relevant.true_target<900]
+        # relevant = relevant[relevant.true_target<900]
         data = data[data.object_id.isin(relevant.object_id)]
         targets = [plasticc_types.index(tag) for tag in relevant['true_target'].values]
         print(len(data.object_id.unique()))
@@ -220,7 +220,7 @@ def create_test_set(metadata_file, data_file_template, output_fname, code='00'):
         print('almost done with {}'.format(i))
         print('saving ...')
         dataset = {'X':x,'ids':obj_ids,'Y':targets}
-        output_file = plasticc_data_dir+output_fname+'{}_no99.h5'.format(i)
+        output_file = plasticc_data_dir+output_fname+'{}.h5'.format(i)
         save_dmdts(dataset,output_file)
         print('done with {}!'.format(i))
         # break
@@ -551,24 +551,25 @@ def check(metadata_file):
     print(len(set(new_ids)))
     # print(len(ids)*3)
 
-def create_training_set(code='00'):
-    train_data_file = plasticc_data_dir+'plasticc_train_lightcurves.csv'
+def create_training_set(code='00', shuffle =False):
+    train_data_file = plasticc_data_dir+'plasticc_new10kshuffle_train_data.csv'
+    # train_data_file = plasticc_data_dir+'plasticc_train_lightcurves.csv'
     # train_data_file = plasticc_data_dir+'plasticc_train_lightcurves_augmented_noise4.csv'
-    train_metadata_file = plasticc_data_dir+"plasticc_train_metadata.csv"
+    train_metadata_file = plasticc_data_dir+"plasticc_new10kshuffle_train_metadata.csv"
     # train_metadata_file = plasticc_data_dir+"plasticc_train_metadata_augmented_noise4.csv"
     meta_data = pd.read_csv(train_metadata_file)
     data = pd.read_csv(train_data_file)
     obj_ids = data.object_id.unique()
-    y = [plasticc_types.index(tag) for tag in meta_data[meta_data.object_id==obj_ids]['target'].values]
+    y = [plasticc_types.index(tag) for tag in meta_data[meta_data.object_id==obj_ids]['true_target'].values]
     n_objs = len(meta_data.object_id.unique())
-    print(y[10000:10010])
-    print(meta_data.iloc[10000:10010].target)
-    for resolution in [32,40,48]:
+    # print(y[10000:10010])
+    # print(meta_data.iloc[10000:10010].target)
+    for resolution in [24]:
         print('creating DMDTs ... x{}'.format(resolution))
         x = create_DMDTS(data, n_objs, resolution=resolution, binning_strategy_code=code)
         print('saving ...')
         data_set = {'X':x, 'ids':obj_ids, 'Y':y}
-        output_fname = plasticc_processed_data_dir+'dmdts_training_{}x{}_b{}.h5'.format(resolution,resolution,code)
+        output_fname = plasticc_processed_data_dir+'dmdts_training_{}x{}_b{}_new10k.h5'.format(resolution,resolution,code)
         save_dmdts(data_set, output_fname)
         print(output_fname)
         # # break
@@ -581,11 +582,11 @@ def create_training_set(code='00'):
 # for code in ['00']:
     # create_training_set(code)
 
-test_metadata_file =  plasticc_data_dir+'plasticc_test_metadata.csv'
-test_data_file = plasticc_data_dir+'plasticc_test_set_batch.csv'
+test_metadata_file =  plasticc_data_dir+'plasticc_new10kshuffle_test_metadata.csv'
+test_data_file_template = plasticc_data_dir+'plasticc_new10kshuffle_test_set_batch'
 for resolution in [24]:
     code = '00'
-    output_fname = 'dmdts_test_{}x{}_b{}'.format(resolution,resolution,code)
+    output_fname = 'dmdts_test_{}x{}_b{}_new10k'.format(resolution,resolution,code)
     create_test_set(test_metadata_file, test_data_file_template,output_fname,code)
 # x, ids, y = create_training_set(train_metadata_file,train_data_file)
 # data_set = {'X':x, 'ids':ids, 'Y':y}

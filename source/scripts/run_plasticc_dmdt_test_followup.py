@@ -6,7 +6,7 @@ import time
 import h5py
 import os, sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from datasets import CachedLCs, LCs
+from datasets import LCs
 from data_samplers import CachedRandomSampler
 from experiment import Experiment
 # from plot_utils import *
@@ -23,20 +23,19 @@ import gc
 from torch.utils.data import RandomSampler
 
 lc_length = 24
-arch_code = 2
+arch_code = 3
 # noise_code = [4,5,6,7]
 noise = 4
 b_code = '00'
-run_number = '3'
+run_number = '15'
 
 results_dir = "../../results/"
-data_dir_training = "/home/ai/phd/data/plasticc/dmdt/training/"
 data_dir_test = "/home/ai/phd/data/plasticc/dmdt/test/"
-
+data_dir_train = "/home/ai/phd/data/plasticc/dmdt/training/"
 # exp_name = results_dir+"dummy"
 
 batch_size = 64
-num_epochs = 60
+num_epochs = 30 
 use_gpu = True
 lr = 1e-04
 lr_str='04'
@@ -53,7 +52,7 @@ kernel_size_str= str(kernel_size)
 # n_filterss = [24,32,40,48,64]
 n_filters = 32
 # pool_sizes = [1,2,3,4]
-pool_size = 3
+pool_size = 2
 # drop_out_convs = [0.1,0.2,0.25,0.3]
 drop_out_conv = 0.25
 # drop_out_linears = [0.1,0.2,0.25,0.3]
@@ -61,11 +60,14 @@ drop_out_linear = 0.25
 # out_linears = [24,32,64,128,256]
 out_linear = 128
 
-exp_name = results_dir+"{}_{}x{}final".format(arch_code,lc_length,lc_length)
-training_data_file=data_dir_training+'dmdts_training_{}x{}_b{}augmented_noise{}.h5'.format(lc_length,lc_length,b_code,noise)
-print(training_data_file)
-train_dataset = LCs(lc_length,training_data_file,n_channels=6)
-train_dataset.load_data_into_memory()
+exp_name = results_dir+"{}_{}x{}final_followup".format(arch_code,lc_length,lc_length)
+training_data_file_0 = data_dir_train+'dmdts_training_24x24_b00augmented_noise4.h5'
+training_data_file=data_dir_test+'dmdts_test_{}x{}_b{}_2.h5'.format(lc_length,lc_length,b_code)
+# print(training_data_file)
+transform = GroupClass(14,14)
+train_dataset = LCs(lc_length,training_data_file,n_channels=6,transform=transform)
+train_dataset0 = LCs(lc_length,training_data_file_0,n_channels=6,transform=transform)
+
 input_shape = torch.Size([6, 24, 24])
 
 
@@ -129,15 +131,26 @@ experiment = Experiment(
     num_output_classes=exp_params["num_output_classes"],
 )
 
-train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-experiment.run_final_train_phase([train_loader],data_name='final_training_{}'.format(run_number), model_name="final_model_{}.pth.tar".format(run_number))
+# train_dataset0.load_data_into_memory()
+train_dataset.load_data_into_memory()
+train_dataset1 = torch.utils.data.ConcatDataset([train_dataset,train_dataset0])
+# train_loader0 = torch.utils.data.DataLoader(train_dataset0, batch_size=batch_size, shuffle=True)
+# train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+train_loader1 = torch.utils.data.DataLoader(train_dataset1, batch_size=batch_size, shuffle=True)
+experiment.run_final_train_phase([train_loader1],data_name='final_training_{}'.format(run_number), model_name="final_model_{}.pth.tar".format(run_number))
 print(torch.cuda.mem_get_info(device=None))
 print("loading model")
 experiment.load_model(exp_name+"/saved_models","final_model_{}.pth.tar".format(run_number))
 print(torch.cuda.mem_get_info(device=None))
-transform = GroupClass(14,14)
 
-for i in range(1,12):
+del train_dataset
+del train_dataset0
+del train_dataset1
+del train_loader1
+# del train_loader0
+del experiment.train_data
+torch.cuda.empty_cache()
+for i in range(3,12):
     run_test_batch(experiment,i)
 
 

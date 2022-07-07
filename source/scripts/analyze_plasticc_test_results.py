@@ -3,17 +3,21 @@ import os, sys
 from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_score,log_loss
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from plot_utils import *
+from datasets import LCs
+
 
 results_dir = "../../results/"
-exp_name = '2_24x24final'
+exp_name = '3_24x24final_followup'
 where = results_dir+exp_name+'/result_outputs/'
-run_number = '2'
+run_number = '15'
+data_dir_train = "/home/ai/phd/data/plasticc/dmdt/training/"
+data_dir_csv = "/home/ai/phd/data/plasticc/csvs/"
 
 def merge_files():
     predictions = []
     probabilities = []
     
-    for i in range(1,12):
+    for i in range(3,12):
         predictions_fn = where+'test_{}_{}_results.csv'.format(i,run_number)
         pred = pd.read_csv(predictions_fn)
         predictions.append(pred)
@@ -51,7 +55,7 @@ def overall_summary(csv_results,csv_probabilities):
     recall = recall_score(targets, predictions,average='micro')
 
     # weight_code = [1,1,1,1,1,1,2,2,1,1,1,1,1,1]
-    weight_code = [1,1,1,1,1,1,2,2,1,1,1,1,1,1,2]
+    weight_code = [1,1,1,1,1,1,2,2,1,1,1,1,1,1,2,2,2,2]
     weights = [weight_code[i] for i in targets.values] 
     # print(probabilities.values.shape)
     # print(targets.shape)
@@ -73,7 +77,7 @@ def overall_cm(csv_results,output_name):
     results = pd.read_csv(where+csv_results)
     predictions = results.prediction
     targets = results.target
-    plot_best_val_cm(targets,predictions,save=True, output_file=out,names=plasticc_names)
+    plot_best_val_cm(targets,predictions,save=True, output_file=out,names=plasticc_names,normalized=True)
 
  
 
@@ -93,6 +97,10 @@ plasticc_type_dict = {
     '53':'Mira',
     '6':'uLens-Single',
     '99':'Class 99'
+    # '991':'uLens-Binary',
+    # '992':'ILOT',
+    # '993':'CART',
+    # '994': 'PISN'
 }
 plasticc_types = [90,67,52,42,62,95,15,64,88,92,65,16,53,6,99]
 plasticc_names = [plasticc_type_dict[k] for k in plasticc_type_dict]
@@ -108,7 +116,20 @@ def probs_to_plasticc_format(csv_probs):
     print(probabilities.head())
     probabilities.to_csv(where+'all_test_probabilities_plasticc_tame.csv',index=False)
 
-# merge_files()
-overall_summary('all_test_results_{}_14.csv'.format(run_number),'all_test_probabilities_{}_14.csv'.format(run_number))
-overall_cm('all_test_results_{}_14.csv'.format(run_number),'all_cm_{}_14.png'.format(run_number))
+def how_many():
+    # train_file = data_dir_train+"dmdts_training_24x24_b00_new8k.h5"
+    # train_data = LCs(24,train_file,n_channels=6)
+    # train_data.load_data_into_memory()
+    # labels = train_data.Y
+    # print(len(train_data))
+    # print(set(labels.cpu().numpy()))
+    train_metadata_fn = data_dir_csv+"plasticc_new8k_train_metadata.csv"
+    train_metadata = pd.read_csv(train_metadata_fn)
+    print(train_metadata.groupby('true_target').count())
+
+merge_files()
+overall_summary('all_test_results_{}.csv'.format(run_number),'all_test_probabilities_{}.csv'.format(run_number))
+overall_cm('all_test_results_{}.csv'.format(run_number),'all_cm_{}.png'.format(run_number))
 # probs_to_plasticc_format('all_test_probabilities_tame.csv')
+
+# how_many()
