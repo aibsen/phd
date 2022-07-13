@@ -208,9 +208,9 @@ class Experiment(nn.Module):
         data_length = sum([len(data.dataset) for data in data_loaders])
         last_train_cm = torch.zeros((data_length,3), dtype=torch.int64, device = self.device) # holds ids, preds, targets
 
-        with tqdm.tqdm(total=n_epochs+1) as pbar_train:
+        with tqdm.tqdm(total=n_epochs) as pbar_train:
 
-            for i, epoch_idx in enumerate(range(n_epochs+1)):
+            for i, epoch_idx in enumerate(range(n_epochs)):
                 
                 epoch_start_time = time.time()
                 running_loss = 0.0
