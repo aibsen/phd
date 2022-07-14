@@ -9,7 +9,7 @@ import tqdm
 import os
 import numpy as np
 import time
-from sklearn.model_selection import KFold
+from sklearn.model_selection import StratifiedKFold
 from datasets import LCs, CachedLCs
 from data_samplers import CachedRandomSampler
 from dataset_utils import cached_crossvalidator_split
@@ -18,7 +18,7 @@ from utils import load_statistics,save_statistics,find_best_epoch
 import pandas as pd
 
 class CVExperiment(nn.Module):
-    def __init__(self, exp_name,exp_params=None,train_data=None,test_data=None,verbose=True,k=5):
+    def __init__(self, exp_name,exp_params=None,train_data=None,test_data=None,verbose=True,k=5,seed=None):
 
         super(CVExperiment, self).__init__()
         self.experiment_folder = os.path.abspath(exp_name)
@@ -42,7 +42,7 @@ class CVExperiment(nn.Module):
         if train_data:
             self.train_length = len(train_data)
  
-            if self.exp_params["chunked"]:
+            if self.exp_params["chunked"]: #just gonna ignore this for now
                 self.kf_length = int(self.train_length/self.k)
                 kf_lengths = [self.kf_length]*self.k
                 self.chunksize=self.exp_params['chunk_size'] if 'chunk_size' in self.exp_params else 100000
@@ -51,8 +51,9 @@ class CVExperiment(nn.Module):
 
             else :
                 idxs = np.arange(self.train_length)
-                kf = KFold(n_splits=k)
-                self.kfs = kf.split(idxs)
+                targets = train_data.targets
+                kf = StratifiedKFold(n_splits=k)
+                self.kfs = kf.split(idxs,targets)
 
         self.test_data = test_data
         if test_data:
@@ -125,9 +126,7 @@ class CVExperiment(nn.Module):
 
             else :
                 train_dataset = torch.utils.data.Subset(self.train_data, tr)
-                print(len(train_dataset))
                 val_dataset = torch.utils.data.Subset(self.train_data, val)
-                print(len(val_dataset))
 
                 experiment = Experiment(
                     network_model = self.exp_params["network_model"],

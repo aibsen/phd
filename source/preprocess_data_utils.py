@@ -123,17 +123,15 @@ def create_interpolated_vectors_plasticc(data, tags, length, dtype='sim', n_chan
     data_cp = data.copy()
     data_cp['ob_p']=data.object_id*10+data.passband
 
-    #sanity check
-    print("there are",data_cp.object_id.unique().size, "objects")
-    print("there are",data_cp.ob_p.unique().size, "lightcurves")
-    print("is the n_lcs 6x n_objs?",data_cp.object_id.unique().size*6==data_cp.ob_p.unique().size)
+    #sanity check, 6 lcs per object
+    assert(data_cp.object_id.unique().size*6==data_cp.ob_p.unique().size)
 
     #get dataframe with min and max mjd values per each object id
     group_by_mjd = data_cp.groupby(['object_id'])['mjd'].agg(['min', 'max']).rename(columns = lambda x : 'time_' + x).reset_index()
     merged = pd.merge(data_cp, group_by_mjd, how = 'left', on = 'object_id')
 
-    #sanity check
-    print("do I still have the same nobjs",merged.object_id.unique().size == data_cp.object_id.unique().size)
+    #sanity check, still same number of objects
+    assert(merged.object_id.unique().size == data_cp.object_id.unique().size)
 
     #scale mjd according to max mjd, min mjd and the desired length of the light curve (128)
     merged['scaled_time'] = (length - 1) * (merged['mjd'] - merged['time_min'])/(merged['time_max']-merged['time_min'])
@@ -141,12 +139,13 @@ def create_interpolated_vectors_plasticc(data, tags, length, dtype='sim', n_chan
     merged['cc'] = merged.groupby(['ob_p'])['count'].cumcount()
     merged=merged.sort_values(['object_id','mjd'])
     #sanity check
-    print("still?",merged.object_id.unique().size==data_cp.object_id.unique().size)
+    assert(merged.object_id.unique().size==data_cp.object_id.unique().size)
 
     #reshape df so that for each row there's one lightcurve (6 rows per obj) and each column is a point of it
     # there is two main columns also, for flux and for mjd
     unstack = merged[['ob_p', 'scaled_time', 'flux', 'cc']].set_index(['ob_p', 'cc']).unstack()
-    print("still when unstacking?",unstack.shape[0]== data_cp.object_id.unique().size*6)
+    #sanity check
+    assert(unstack.shape[0]== data_cp.object_id.unique().size*6)
     #transform above info into numpy arrays
     time_uns = unstack['scaled_time'].values[..., np.newaxis]
     flux_uns = unstack['flux'].values[..., np.newaxis]
@@ -300,30 +299,30 @@ def ids_for_lasair():
     
     return id_str
 
-data_file="tns_search_sn_metadata.csv"
-metadata_file = current_real_data_dir+data_file
-colors = ['#00dbdd','#fd8686','#f9d62d','#b5d466','#ffa77c']
-sn_dict = {'SN Ia':'Ia', 'SN Ib':'Ib/c', 'SN Ic':'Ib/c', 'SN II':'II','SLSN':'SLSN'}
-plot_sns_by_type(sn_dict, metadata_file, colors)
-plot_sns_by_date(metadata_file,colors[-1])
+# data_file="tns_search_sn_metadata.csv"
+# metadata_file = current_real_data_dir+data_file
+# colors = ['#00dbdd','#fd8686','#f9d62d','#b5d466','#ffa77c']
+# sn_dict = {'SN Ia':'Ia', 'SN Ib':'Ib/c', 'SN Ic':'Ib/c', 'SN II':'II','SLSN':'SLSN'}
+# plot_sns_by_type(sn_dict, metadata_file, colors)
+# plot_sns_by_date(metadata_file,colors[-1])
 
-def merge_metadata(current_real_data_dir, n_files=5):
-#this function is for reading metadata files downloaded from tns server and merging
-#them together into one for later easier analysis. it receives the initial data
-#directory and the number of files in it.
+# def merge_metadata(current_real_data_dir, n_files=5):
+# #this function is for reading metadata files downloaded from tns server and merging
+# #them together into one for later easier analysis. it receives the initial data
+# #directory and the number of files in it.
 
-    data_file = "tns_search.csv"
-    df=pd.read_csv(current_real_data_dir+data_file)
+#     data_file = "tns_search.csv"
+#     df=pd.read_csv(current_real_data_dir+data_file)
 
-    for i in np.arange(1,n_files+1):
-        data_file = current_real_data_dir+"tns_search({}).csv".format(i)
-        print(data_file)
-        df2 = pd.read_csv(data_file)
-        df = pd.concat([df,df2])
-        # print(df.head())
-        print(df.shape)
+#     for i in np.arange(1,n_files+1):
+#         data_file = current_real_data_dir+"tns_search({}).csv".format(i)
+#         print(data_file)
+#         df2 = pd.read_csv(data_file)
+#         df = pd.concat([df,df2])
+#         # print(df.head())
+#         print(df.shape)
 
-    print(df.keys())
-    df=df.drop_duplicates(keep="first")
+#     print(df.keys())
+#     df=df.drop_duplicates(keep="first")
 
-    df.to_csv(current_real_data_dir+"tns_search_sn_metadata.csv",index=False)
+#     df.to_csv(current_real_data_dir+"tns_search_sn_metadata.csv",index=False)
