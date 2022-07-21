@@ -10,39 +10,63 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from preprocess_data_utils import *
 
 plasticc_data_dir = "../../data/plasticc/" 
-train_metadata_file = plasticc_data_dir+"csvs/plasticc_train_metadata.csv"
-train_data_file = plasticc_data_dir+"csvs/plasticc_train_lightcurves.csv"
 
-dataset_file = plasticc_data_dir+"plasticc_train_dataset.h5"
+train_metadata_file = plasticc_data_dir+"csvs/plasticc_train_metadata_augmented_noise4.csv"
+train_data_file = plasticc_data_dir+"csvs/plasticc_train_lightcurves_augmented_noise4.csv"
+
+test_metadata_file = plasticc_data_dir+"csvs/plasticc_test_metadata.csv"
+test_data_file_template = plasticc_data_dir+"csvs/plasticc_test_set_batch"
+
+plasticc_classes = [90,67,52,42,62,95,15,64,88,92,65,16,53,6,991,992,993,994,995]
 
 
-def create_interpolated_train_vectors():
-        #get tags
+def preprocess_train_data():
         metadata = pd.read_csv(train_metadata_file)
         data = pd.read_csv(train_data_file)
 
-        tags = metadata[["object_id","target"]]
+        X, obj_ids = create_interpolated_vectors_plasticc(data,128)
+
+        tags = metadata[["object_id", "true_target"]]
+        tags = tags[tags.object_id.isin(obj_ids)]
+        tags.loc[:,"true_target"] = [plasticc_classes.index(tag) for tag in metadata["true_target"]]
+        Y = tags.true_target.values
+
+        dataset = {'X':X, 'ids':obj_ids, 'Y':Y}
+        output_fname = plasticc_data_dir+"interpolated/training/plasticc_train_data_augmented.h5"
+        save_vectors(dataset, output_fname)
+
+def preprocess_test_data():
+        metadata = pd.read_csv(test_metadata_file)
+
+        for i in np.arange(3,12):
+                data_fname = "csvs/plasticc_test_set_batch{}.csv".format(i)
+                data = pd.read_csv(plasticc_data_dir+data_fname)
+                X, obj_ids = create_interpolated_vectors_plasticc(data, 128)
+
+                chunk_metadata = metadata[metadata.object_id.isin(obj_ids)]
+                tags = chunk_metadata[['object_id', 'true_target']]
+                tags.loc[:,'true_target'] = [plasticc_classes.index(tag) for tag in chunk_metadata["true_target"]]
         
-        # X,obj_ids,Y = 
-        obj_ids = create_interpolated_vectors_plasticc(data,128)
-        print(tags[tags.object_id.isin(obj_ids)])
+                Y = tags.true_target.values
+        
+                print(obj_ids)
+                print(tags)
+                print(Y)
 
-        # # write to file
-        # if i == 1: #create dataset if it's the 1st chunk
-        #     hf.create_dataset('X', data=X, compression="gzip", chunks=True, maxshape=(None,None,None)) 
-        #     hf.create_dataset('Y', data=Y, compression="gzip", chunks=True, maxshape=(None,)) 
-        #     hf.create_dataset('ids', data=obj_ids, compression="gzip", chunks=True, maxshape=(None,)) 
-        # else: #resize the dataset otherwise
-        #     hf["X"].resize((hf["X"].shape[0] + X.shape[0]), axis = 0)
-        #     hf["X"][-X.shape[0]:] = X
-
-        #     hf["Y"].resize((hf["Y"].shape[0] + Y.shape[0]), axis = 0)
-        #     hf["Y"][-Y.shape[0]:] = Y
-
-        #     hf["ids"].resize((hf["ids"].shape[0] + obj_ids.shape[0]), axis = 0)
-        #     hf["ids"][-obj_ids.shape[0]:] = obj_ids
+                dataset = {'X':X, 'ids':obj_ids, 'Y':Y}
+                output_fname = plasticc_data_dir+'interpolated/test/plasticc_test_data_batch{}.h5'.format(i)
+                save_vectors(dataset, output_fname)
+                # break
 
 
+# # preprocess_train_data()
+preprocess_test_data()
 
 
-create_interpolated_train_vectors()
+# interpolated_dataset_filename=fpath+'plasticc_test_data_batch1.h5'
+# interpolated_dataset = LCs(lc_length, interpolated_dataset_filename)
+# dataset_length = len(interpolated_dataset)
+# print(dataset_length)
+# print(interpolated_dataset[100])
+
+
