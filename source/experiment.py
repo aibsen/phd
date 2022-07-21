@@ -4,22 +4,21 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-import torch.backends.cudnn as cudnn
 import tqdm
 import os
 import numpy as np
 import pandas as pd
 import time
-from torch.utils.data import SequentialSampler
-from sklearn.metrics import precision_recall_fscore_support, accuracy_score
+from torchmetrics.functional import precision_recall, f1_score, accuracy
 # from utils import save_to_stats_pkl_file, load_from_stats_pkl_file, \
 #     save_statistics, load_statistics, save_classification_results
 
 
 class Experiment(nn.Module):
     def __init__(self, network_model, 
-        experiment_name,metric="f1_score", 
-        num_epochs=100, 
+        experiment_name,
+        num_epochs=100,
+        num_output_classes=14, 
         learning_rate=1e-03,
         batch_size = 64, 
         train_data=None, 
@@ -29,40 +28,37 @@ class Experiment(nn.Module):
         val_sampler=None,
         test_sampler = None,
         weight_decay_coefficient=1e-03, 
-        use_gpu=True, 
-        continue_from_epoch=-1, 
-        best_idx=0, 
-        verbose=True,
-        cached_dataset=False,
-        patience=5,
-        validation_step=5,
+        patience=3,
+        validation_step=3,
         class_weights = None):
 
         super(Experiment, self).__init__()
 
-        if torch.cuda.is_available() and use_gpu:
+        if torch.cuda.is_available():
             self.device = torch.device('cuda')
             os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-            if verbose:
-                print("using GPU")
-        else:
-            if verbose:
-                print("using CPU")
-            self.device = torch.device('cpu')
+            # print("using GPU")
 
-        self.metric = metric
-        self.verbose = verbose
         self.experiment_name = experiment_name
         self.model = network_model
         self.model.to(self.device)
         self.model.reset_parameters()
         self.patience = patience
         self.validation_step = validation_step
+        self.batch_size = batch_size
+        self.num_epochs = num_epochs
+        self.num_output_classes = num_output_classes
 
         self.train_data=None
         self.val_data=None
         self.test_data=None
-        self.starting_epoch = 0
+
+        if self.validation_step > self.num_epochs:
+            print("Validation step should be less than the number of epochs so at least one run is possible")
+            sys.exit()
+        
+        if self.patience > int(self.num_epochs/self.validation_step):
+            print("Infinite patience, early stopping won't be an option")
         
         if train_data:
             if train_sampler is not None:
@@ -87,35 +83,24 @@ class Experiment(nn.Module):
 
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate, amsgrad=False,
                                     weight_decay=weight_decay_coefficient)
+        if class_weights:
+            class_weights = torch.FloatTensor(class_weights).cuda()
+        self.criterion = nn.CrossEntropyLoss(weight=class_weights).to(self.device)  # send the loss computation to the GPU
 
         # Generate the directory names
         self.experiment_folder = os.path.abspath(experiment_name)
         self.experiment_logs = os.path.abspath(os.path.join(self.experiment_folder, "result_outputs"))
         self.experiment_saved_models = os.path.abspath(os.path.join(self.experiment_folder, "saved_models"))
 
-        # Set best models to be at 0 since we are just starting
-        self.best_val_model_idx = best_idx
-        self.best_val_model_f1 = 0
-
         if not os.path.exists(self.experiment_folder):  # If experiment directory does not exist
             os.mkdir(self.experiment_folder)  # create the experiment directory
             os.mkdir(self.experiment_logs)  # create the experiment log directory
             os.mkdir(self.experiment_saved_models)  # create the experiment saved models directory
 
-        self.num_epochs = num_epochs
-        self.break_epoch = num_epochs
-        if class_weights:
-            class_weights = torch.FloatTensor(class_weights).cuda()
-        self.criterion = nn.CrossEntropyLoss(weight=class_weights).to(self.device)  # send the loss computation to the GPU
-
-        if continue_from_epoch != -1:  # if continue from epoch is not -1 then
-            try:
-                self.best_val_model_idx, self.best_val_model_f1 = self.load_model(
-                    model_save_dir=self.experiment_saved_models, model_save_name="epoch",
-                    model_idx=continue_from_epoch)  # reload existing model from epoch
-                self.starting_epoch = continue_from_epoch
-            except:
-                print("Did not save that epoch's model, will start from 0")
+        # Set best model f1_score to be at 0 and the best epoch to be num_epochs, since we are just starting
+        self.best_epoch = num_epochs
+        self.best_f1 = 0
+        self.state = {}
 
     def run_train_iter(self, x, y):
         self.train()
@@ -124,205 +109,245 @@ class Experiment(nn.Module):
         loss = self.criterion(out,y)
         loss.backward()  # backpropagate
         self.optimizer.step()
-        predicted = F.log_softmax(out.data,dim=1)
+        predicted = F.softmax(out.data,dim=1)
         predicted = torch.argmax(predicted, 1)
-        loss = loss.data.cpu().numpy()
-        y_cpu = list(y.data.cpu().numpy())
-        predicted_cpu = list(predicted.cpu().numpy())
-        return loss, predicted_cpu, y_cpu
+        return loss, predicted
 
     def run_evaluation_iter(self, x, y):
         self.eval()  # sets the system to validation mode
         out = self.model.forward(x)  # forward the data in the model
         loss =  self.criterion(out,y)
-        predicted = F.log_softmax(out.data,dim=1)
-        predicted = torch.argmax(predicted, 1)
-        loss = loss.data.cpu().numpy()
-        y_cpu = list(y.data.cpu().numpy())
-        predicted_cpu = list(predicted.cpu().numpy())
-        return loss, predicted_cpu, y_cpu
+        predicted_soft = F.softmax(out.data,dim=1)
+        # predicted_soft = F.softmax(F.softmax(out.data,dim=1),dim=1)
+        # print(predicted_soft)
+        # print(predicted_soft.shape)
+        predicted = torch.argmax(predicted_soft, 1)
+        return loss, predicted, predicted_soft
 
-    def save_model(self, model_save_dir, model_save_name, model_idx, best_validation_model_idx):
-        state = dict()
-        state['network'] = self.model.state_dict()  # save network parameter and other variables.
-        state['best_val_model_idx'] = best_validation_model_idx  # save current best val idx
-        torch.save(state, f=os.path.join(model_save_dir, "{}_{}".format(model_save_name, str(
-            model_idx))))
+    def save_model(self, model_save_name):
+        save_path = os.path.join(self.experiment_saved_models, model_save_name)
+        torch.save(self.state,save_path)
+        # state = dict()
+        # state['network'] = self.model.state_dict()  # save network parameter and other variables.
+        # state['best_val_model_idx'] = best_validation_model_idx  # save current best val idx
+        # torch.save(state, f=os.path.join(model_save_dir, "{}_{}".format(model_save_name, str(
+            # model_idx+1))))
 
-    def load_model(self, model_save_dir, model_save_name, model_idx):
-        filename = os.path.join(model_save_dir, "{}_{}".format(model_save_name, str(model_idx)))
-        state = torch.load(f=filename)
-        self.model.load_state_dict(state_dict=state['network'])
-        return state['best_val_model_idx']#, state['best_val_model_acc'], state['best_val_model_f1']
+    def load_model(self, model_save_dir, model_save_name):
+        save_path = os.path.join(model_save_dir, model_save_name)
+        self.state = torch.load(f=save_path)
+        self.model.load_state_dict(state_dict=self.state['model'])
+        self.optimizer.load_state_dict(state_dict=self.state['optimizer'])
+        self.best_epoch = self.state['epoch']
+        self.best_f1 = self.state['f1']
+        # return state['best_val_model_idx']#, state['best_val_model_acc'], state['best_val_model_f1']
 
-    def save_statistics(self, experiment_log_dir, filename, stats_dict):
-        df = pd.DataFrame(stats_dict)
-        path = os.path.join(experiment_log_dir, filename)
-        df.to_csv(path,sep=',',index=False)
+    def save_statistics(self, stats, fn):
+        stats_keys = ['epoch', 'accuracy', 'loss', 'f1', 'precision', 'recall']
+        stats_df = pd.DataFrame(stats.cpu().numpy() , columns = stats_keys)
+        stats_df = stats_df[stats_df.epoch>=0]
+        stats_df.epoch = stats_df.epoch.astype(int)
+        stats_df.to_csv(self.experiment_logs+'/'+fn ,sep=',',index=False)
+    
+    def save_results(self, results, fn):
+        results_keys = ['object_id','prediction','target']
+        results_df = pd.DataFrame(results.cpu().numpy(), columns=results_keys)
+        results_df.to_csv(self.experiment_logs+'/'+fn,sep=',',index=False)
 
-    def run_test_phase(self, data, model_idx, experiment_log_dir, model_name="final_model"):
+    def save_probabilities(self, results, fn):
+        results_keys = ['object_id']+[str(i) for i in range (self.num_output_classes)]
+        results_df = pd.DataFrame(results.cpu().numpy(), columns=results_keys)
+        results_df['object_id'] = results_df['object_id'].astype('int64')
+        results_df.to_csv(self.experiment_logs+'/'+fn,sep=',',index=False)
+
+
+    def run_test_phase(self, data=None, model_name="final_model.pth.tar",data_name="test",load_model=True):
         start_time = time.time()
-        self.load_model(model_save_dir=experiment_log_dir, model_save_name=model_name,model_idx=model_idx)
-
-        test_targets=[]
-        test_predictions=[]
-        test_loss_cum=0
-        test_ids=[]
-
+        data = data if data else self.test_data
+        if load_model:
+            self.load_model(model_save_dir=self.experiment_saved_models, model_save_name=model_name)
+        results_cm = torch.zeros((len(data.dataset),3), dtype=torch.int64, device = self.device) # holds ids, preds, targets
+        results_probs = torch.zeros((len(data.dataset),self.num_output_classes+1), dtype=torch.double, device = self.device) # holds ids, probability predictions
+        running_loss = 0.0
+        
         with tqdm.tqdm(total=len(data)) as pbar:
             for i,(x, y, ids) in enumerate(data):
-                loss, pred, targets = self.run_evaluation_iter(x=x,y=y)
-                test_ids+=list(ids.cpu().numpy())
-                test_loss_cum += loss
-                test_predictions += pred
-                test_targets += targets
+                loss, preds, preds_soft = self.run_evaluation_iter(x=x,y=y)
+                torch.stack((ids,preds,y),dim=1,out=results_cm[i*self.batch_size])
+                torch.cat((torch.unsqueeze(ids,1),preds_soft), dim=1, out=results_probs[i*self.batch_size])
+                running_loss += loss.item()
                 pbar.update(1)
                 elapsed_time = time.time() - start_time 
-                pbar.set_description("Test loss: {:.3f}        , ET {:.2f}s".format(test_loss_cum/(i+1),elapsed_time))
+                pbar.set_description("Test loss: {:.3f}        , ET {:.2f}s".format(running_loss/(i+1),elapsed_time))
 
-        loss = test_loss_cum/len(data)
-        accuracy = accuracy_score(test_targets, test_predictions)
-        precision, recall, f1, _ = precision_recall_fscore_support(test_targets, test_predictions, average = 'macro', zero_division=0)
 
-        metrics={"test_acc": [accuracy], "test_loss": [loss], "test_f1": [f1],"test_precision":[precision],"test_recall":[recall]}
-        results = pd.DataFrame({'ids':test_ids,'targets':test_targets,'predictions':test_predictions }) 
+        preds, targets = results_cm[:,1],results_cm[:,2]
+        precision, recall = precision_recall(preds, targets, num_classes=self.num_output_classes, average='macro')
+        loss = running_loss/len(data)
+        test_stats = torch.full((1,6),-1, dtype=torch.float, device=self.device) # holds epoch, acc, loss, f1, precission, recall, per train epoch
+        test_stats[0,0] = 1 #epoch
+        test_stats[0,1] = accuracy(preds,targets, num_classes=self.num_output_classes, average='micro') #accuracy
+        test_stats[0,2] = loss #loss
+        test_stats[0,3] = f1_score(preds, targets, num_classes=self.num_output_classes, average='macro') #f1
+        test_stats[0,4] = precision # precision
+        test_stats[0,5] = recall #recall
 
-        self.save_statistics(experiment_log_dir=experiment_log_dir,filename='test_results.csv',stats_dict=results)
-        self.save_statistics(experiment_log_dir=experiment_log_dir, filename="test_summary.csv",stats_dict=metrics)
+        self.save_probabilities(results_probs, data_name+"_probabilities.csv")
+        self.save_statistics(test_stats, data_name+"_summary.csv")
+        self.save_results(results_cm, data_name+"_results.csv")
 
-    def run_final_train_phase(self, data_loaders, experiment_log_dir, model_name="final_model"):
+    def run_final_train_phase(self, data_loaders=None,n_epochs=None, model_name="final_model.pth.tar", data_name = 'final_training'):
+        print(self.num_output_classes)
         start_time = time.time()
-                
+        n_epochs = n_epochs if n_epochs else self.best_epoch
+        data_loaders = data_loaders if data_loaders else [self.train_data,self.val_data]
         self.model.reset_parameters()
-        train_stats = {"epoch": [],"train_acc": [], "train_loss": [], "train_f1":[],"train_precision":[],"train_recall":[]}  # initialize a dict to keep the per-epoch metrics
+        train_stats = torch.full((n_epochs+1,6),-1, dtype=torch.float, device=self.device) # holds epoch, acc, loss, f1, precission, recall, per train epoch
 
         n_batches = sum([len(data) for data in data_loaders])
-        with tqdm.tqdm(total=self.break_epoch) as pbar_train:
+        data_length = sum([len(data.dataset) for data in data_loaders])
+        last_train_cm = torch.zeros((data_length,3), dtype=torch.int64, device = self.device) # holds ids, preds, targets
 
-            for i, epoch_idx in enumerate(range(self.starting_epoch, self.break_epoch)):
+        with tqdm.tqdm(total=n_epochs) as pbar_train:
+
+            for i, epoch_idx in enumerate(range(n_epochs)):
                 
                 epoch_start_time = time.time()
-                train_loss_cum = 0 
-                train_predictions = []
-                train_targets = []
+                running_loss = 0.0
+                cm_idx = 0    
 
-                for data in data_loaders:
-                    for idx, (x, y,ids) in enumerate(data):
-                        loss, pred, targets = self.run_train_iter(x=x, y=y)
-                        train_loss_cum += loss
-                        train_predictions += pred
-                        train_targets += targets
-                        
-                
-                loss = train_loss_cum/n_batches
-                accuracy = accuracy_score(train_targets, train_predictions)
-                precision, recall, f1, _ = precision_recall_fscore_support(train_targets, train_predictions, average = 'macro', zero_division=0)
-                
-                train_stats['train_acc'].append(accuracy)
-                train_stats['train_loss'].append(loss)
-                train_stats['train_f1'].append(f1)
-                train_stats['train_recall'].append(recall)
-                train_stats['train_precision'].append(precision)
-                train_stats['epoch'].append(epoch_idx)
+                for i, data in enumerate(data_loaders):
+                    for idx, (x, y, ids) in enumerate(data):
+                        loss, preds = self.run_train_iter(x=x, y=y)
+                        running_loss += loss.item()
+                        batch_size = len(x)
+                        torch.stack((ids,preds,y),dim=1,out=last_train_cm[cm_idx])
+                        cm_idx+=batch_size
+
+                preds, targets = last_train_cm[:,1],last_train_cm[:,2]
+                precision, recall = precision_recall(preds, targets, num_classes=self.num_output_classes, average='macro')
+                train_loss = running_loss/n_batches
+                f1=f1_score(preds, targets, num_classes=self.num_output_classes, average='macro') #f1
+
+                train_stats[epoch_idx,0] = epoch_idx+1 #epoch
+                train_stats[epoch_idx,1] = accuracy(preds,targets, num_classes=self.num_output_classes, average='micro') #accuracy
+                train_stats[epoch_idx,2] = train_loss #loss
+                train_stats[epoch_idx,3] = f1
+                train_stats[epoch_idx,4] = precision # precision
+                train_stats[epoch_idx,5] = recall #recall
+
                 pbar_train.update(1)
-
                 elapsed_time = time.time() - start_time  
-                pbar_train.set_description("Train loss: {:.3f}       , ET {:.2F}s".format(loss,elapsed_time))
+                pbar_train.set_description("Train loss: {:.3f}       , ET {:.2f}s".format(train_loss,elapsed_time))
                 
-                
-        self.save_statistics(experiment_log_dir=experiment_log_dir, filename='final_training_summary.csv',
-            stats_dict=train_stats)  # save statistics
-        self.save_model(model_save_dir=experiment_log_dir,
-                    model_save_name=model_name, model_idx=self.break_epoch,best_validation_model_idx=self.break_epoch)    
+        self.save_statistics(train_stats, '{}_summary.csv'.format(data_name))
+        self.save_results(last_train_cm, '{}_results.csv'.format(data_name))
+        self.state = {
+            'epoch': n_epochs,
+            'model': self.model.state_dict(),
+            'optimizer':self.optimizer.state_dict(),
+            'f1':f1
+                    }
+        self.save_model(model_name) 
         
     def run_train_phase(self):
         start_time = time.time()
-        train_stats = {"epoch": [],"train_acc": [], "train_loss": [], "train_f1":[],"train_precision":[],"train_recall":[]}  # initialize a dict to keep the per-epoch metrics
-        val_stats = {"epoch": [],"val_acc": [],"val_loss": [], "val_f1":[], "val_precision":[],"val_recall":[]}
-        
+
         strike = 0
         step_count = 0
-        val_loss = np.Inf #initial value
+        last_val_performance = 0
+
+        last_train_cm = torch.zeros((len(self.train_data.dataset),3), dtype=torch.int64, device=self.device) # holds ids, preds, targets
+        current_val_cm = torch.zeros((len(self.val_data.dataset),3), dtype=torch.int64, device=self.device) # holds ids, preds, targets
+        best_val_cm = torch.zeros((len(self.val_data.dataset),3), dtype=torch.int64, device=self.device) # holds ids, preds, targets
+        
+        val_stats = torch.full((int(self.num_epochs/self.validation_step),6),-1, dtype=torch.float, device=self.device) # holds epoch, acc, loss, f1, precission, recall, per validation epoch
+        train_stats = torch.full((int(self.num_epochs),6),-1, dtype=torch.float, device=self.device) # holds epoch, acc, loss, f1, precission, recall, per train epoch
+        
+        train_n_batches = len(self.train_data)
+        val_n_batches = len(self.val_data)
+        val_loss = -1
+        val_idx = 0
 
         with tqdm.tqdm(total=self.num_epochs) as pbar_train:
 
-            for i, epoch_idx in enumerate(range(self.starting_epoch, self.num_epochs)):
-                
+            for i, epoch_idx in enumerate(range(self.num_epochs)):
                 step_count+=1
-                train_loss_cum = 0 
-                train_predictions = []
-                train_targets = []
-                n_batches = len(self.train_data)
+                running_train_loss = 0.0
 
                 for idx, (x, y,ids) in enumerate(self.train_data):
-                    loss, pred, targets = self.run_train_iter(x=x, y=y)
-                    train_loss_cum += loss
-                    train_predictions += pred
-                    train_targets += targets                
-                
-                train_loss = train_loss_cum/n_batches
-                accuracy = accuracy_score(train_targets, train_predictions)
-                precision, recall, f1, _ = precision_recall_fscore_support(train_targets, train_predictions, average = 'macro', zero_division=0)
-                
-                train_stats['train_acc'].append(accuracy)
-                train_stats['train_loss'].append(train_loss)
-                train_stats['train_f1'].append(f1)
-                train_stats['train_recall'].append(recall)
-                train_stats['train_precision'].append(precision)
-                train_stats['epoch'].append(epoch_idx)
+                    loss, preds = self.run_train_iter(x=x, y=y)
+                    running_train_loss += loss.item()
+                    torch.stack((ids,preds,y),dim=1,out=last_train_cm[idx*self.batch_size])
+
+                preds, targets = last_train_cm[:,1],last_train_cm[:,2]
+                precision, recall = precision_recall(preds,targets, num_classes=self.num_output_classes, average='macro')
+                train_loss = running_train_loss/train_n_batches
+
+                train_stats[epoch_idx,0] = epoch_idx+1 #epoch
+                train_stats[epoch_idx,1] = accuracy(preds,targets, num_classes=self.num_output_classes, average='micro') #accuracy
+                train_stats[epoch_idx,2] = train_loss #loss
+                train_stats[epoch_idx,3] = f1_score(preds,targets, num_classes = self.num_output_classes, average='macro') #f1
+                train_stats[epoch_idx,4] = precision # precision
+                train_stats[epoch_idx,5] = recall #recall
             
                 if step_count == self.validation_step:
-                    step_count = 0
-                    # with tqdm.tqdm(total=len(self.val_data)) as pbar_val:
 
-                    val_loss_cum = 0 
-                    val_predictions = []
-                    val_targets = []
-                    n_batches = len(self.val_data)
+                    step_count = 0
+                    running_val_loss = 0.0
 
                     for idx, (x, y, ids) in enumerate(self.val_data):
-                        loss, pred, targets = self.run_evaluation_iter(x=x, y=y)
-                        val_loss_cum += loss
-                        val_predictions += pred
-                        val_targets += targets
-                        
+                        loss, preds, _ = self.run_evaluation_iter(x=x, y=y)
+                        running_val_loss += loss.item()
+                        torch.stack((ids,preds,y),dim=1,out=current_val_cm[idx*self.batch_size])
 
-                    val_loss = val_loss_cum/n_batches
-                    accuracy = accuracy_score(val_targets, val_predictions)
-                    precision, recall, f1, _ = precision_recall_fscore_support(val_targets, val_predictions, average = 'macro', zero_division=0)
-                    
-                    val_stats['val_acc'].append(accuracy)
-                    val_stats['val_loss'].append(val_loss)
-                    val_stats['val_f1'].append(f1)
-                    val_stats['val_recall'].append(recall)
-                    val_stats['val_precision'].append(precision)
-                    val_stats['epoch'].append(epoch_idx)
+                    preds, targets = current_val_cm[:,1],current_val_cm[:,2]
+                    precision, recall = precision_recall(preds,targets, num_classes=self.num_output_classes, average='macro')
+                    f1 = f1_score(preds,targets, num_classes=self.num_output_classes, average='macro')
+                    val_loss = running_val_loss/val_n_batches
 
-                #if the f1-score of the current epoch for the validation set is better than previous epochs
-                if f1 > self.best_val_model_f1:
-                    self.best_val_model_f1 = f1
-                    self.best_val_model_idx = epoch_idx
-                    self.save_model(model_save_dir=self.experiment_saved_models,
-                        model_save_name="epoch", model_idx=epoch_idx,best_validation_model_idx=self.best_val_model_idx)
-                    self.break_epoch = epoch_idx
-                    strike = 0
-                else:
-                    strike+=1
+                    val_stats[val_idx,0] = epoch_idx+1 #epoch
+                    val_stats[val_idx,1] = accuracy(preds,targets, num_classes=self.num_output_classes, average='micro') #accuracy
+                    val_stats[val_idx,2] = val_loss #loss
+                    val_stats[val_idx,3] = f1 #f1
+                    val_stats[val_idx,4] = precision # precision
+                    val_stats[val_idx,5] = recall #recall
+                    val_idx+=1
+
+                    #if the f1-score of the current epoch for the validation set is better than previous epochs
+                    if f1 > self.best_f1:
+                        best_val_cm = current_val_cm
+                        self.best_f1 = f1
+                        self.best_epoch = epoch_idx
+                        self.state = {
+                            'epoch': epoch_idx,
+                            'model': self.model.state_dict(),
+                            'optimizer':self.optimizer.state_dict(),
+                            'f1':f1
+                        }
+                        strike = 0
+
+                    else:
+                        strike+=1
+
+                    last_val_performance = f1
 
                 pbar_train.update(1)
                 elapsed_time = time.time() - start_time 
-                pbar_train.set_description("Tr/Val loss: {:.3f}/{:.3f}, ET {:.2f}s".format(train_loss,val_loss,elapsed_time))
-
+                pbar_train.set_description("Tr/Val loss: {:.3f}/{:.3f}, Strike: {}, ET {:.2f}s".format(train_loss,val_loss,strike,elapsed_time))
+                
                 if strike == self.patience:
-                    print("Early stop, model is overfitting")
+                    pbar_train.set_description("Tr/Val loss: {:.3f}/{:.3f}, Best epoch: {}, ET {:.2f}s".format(train_loss,val_loss,self.best_epoch+1,elapsed_time))
                     break
 
         #save statistics at the end only
-        self.save_statistics(experiment_log_dir=self.experiment_logs, filename='training_summary.csv',
-                stats_dict=train_stats)  # save statistics    
-        self.save_statistics(experiment_log_dir=self.experiment_logs, filename='validation_summary.csv',
-                stats_dict=val_stats)  # save statistics    
-
+        self.save_model("best_validation_model.pth.tar")
+        self.save_statistics(train_stats, 'training_summary.csv')
+        self.save_results(last_train_cm, 'training_results.csv')
+        self.save_statistics(val_stats, 'validation_summary.csv')
+        self.save_results(best_val_cm, 'validation_results.csv')
+    
+    
     def run_experiment(self):
         """
         Runs experiment train and evaluation iterations, saving the model and best val model and val model accuracy after each epoch
@@ -336,11 +361,10 @@ class Experiment(nn.Module):
             print("")
             print("Starting final training phase")
             print("")
-            self.run_final_train_phase([self.train_data,self.val_data],self.experiment_logs)
+            self.run_final_train_phase()
 
         if self.test_data:
-            if self.verbose:
-                print("")
-                print("Starting test phase")
-                print("")
-            self.run_test_phase(self.test_data, self.break_epoch,self.experiment_logs)
+            print("")
+            print("Starting test phase")
+            print("")
+            self.run_test_phase(self.test_data)
