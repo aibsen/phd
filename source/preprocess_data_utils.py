@@ -49,7 +49,7 @@ def df_tags(df_sn, t):
     df_sn_tags.loc[:,"type"] = t
     return df_sn_tags
 
-def create_interpolated_vectors(data, tags, length, dtype='sim', n_channels=2):
+def create_interpolated_vectors(data, tags, length, n_channels=2):
     obj_ids = tags.id.unique()
     data_cp = data.copy()
     # if dtype == 'sim':
@@ -118,13 +118,13 @@ def create_interpolated_vectors(data, tags, length, dtype='sim', n_channels=2):
     elif n_channels == 2:
         return X_per_band, obj_ids, tags.type.values
 
-def create_interpolated_vectors_plasticc(data, tags, length, dtype='sim', n_channels=6):
-    obj_ids = tags.object_id.unique()
+def create_interpolated_vectors_plasticc(data, length, n_channels=6):
+    # obj_ids = tags.object_id.unique()
     data_cp = data.copy()
     data_cp['ob_p']=data.object_id*10+data.passband
 
     #sanity check, 6 lcs per object
-    assert(data_cp.object_id.unique().size*6==data_cp.ob_p.unique().size)
+    assert(data_cp.object_id.unique().size*n_channels==data_cp.ob_p.unique().size)
 
     #get dataframe with min and max mjd values per each object id
     group_by_mjd = data_cp.groupby(['object_id'])['mjd'].agg(['min', 'max']).rename(columns = lambda x : 'time_' + x).reset_index()
@@ -144,40 +144,44 @@ def create_interpolated_vectors_plasticc(data, tags, length, dtype='sim', n_chan
     #reshape df so that for each row there's one lightcurve (6 rows per obj) and each column is a point of it
     # there is two main columns also, for flux and for mjd
     unstack = merged[['ob_p', 'scaled_time', 'flux', 'cc']].set_index(['ob_p', 'cc']).unstack()
+    print(merged)
+    print(unstack)
+    print(merged.object_id.unique())
     #sanity check
-    assert(unstack.shape[0]== data_cp.object_id.unique().size*6)
-    #transform above info into numpy arrays
-    time_uns = unstack['scaled_time'].values[..., np.newaxis]
-    flux_uns = unstack['flux'].values[..., np.newaxis]
-    time_flux = np.concatenate((time_uns, flux_uns), axis =2)
-    #create a mask to get points that are valid (not nan)
-    #do this for time dim only, since fluxes will be nan when times are also
-    nan_masks = ~np.isnan(time_flux)[:, :, 0]
-    x = np.arange(length)
-    n_lcs = time_flux.shape[0]
-    #here we'll store interpolated lcs
-    X = np.zeros((n_lcs, x.shape[0]))
-    t=range(n_lcs)
-    for i in t:
-        if nan_masks[i].any(): #if any point is real
-            X[i] = np.interp(x, time_flux[i][:, 0][nan_masks[i]], time_flux[i][:, 1][nan_masks[i]])
-        else:
-            X[i] = np.zeros_like(x)
+    # assert(unstack.shape[0]== data_cp.object_id.unique().size*n_channels)
+    # #transform above info into numpy arrays
+    # time_uns = unstack['scaled_time'].values[..., np.newaxis]
+    # flux_uns = unstack['flux'].values[..., np.newaxis]
+    # time_flux = np.concatenate((time_uns, flux_uns), axis =2)
+    # #create a mask to get points that are valid (not nan)
+    # #do this for time dim only, since fluxes will be nan when times are also
+    # nan_masks = ~np.isnan(time_flux)[:, :, 0]
+    # x = np.arange(length)
+    # n_lcs = time_flux.shape[0]
+    # #here we'll store interpolated lcs
+    # X = np.zeros((n_lcs, x.shape[0]))
+    # t=range(n_lcs)
+    # for i in t:
+    #     if nan_masks[i].any(): #if any point is real
+    #         X[i] = np.interp(x, time_flux[i][:, 0][nan_masks[i]], time_flux[i][:, 1][nan_masks[i]])
+    #     else:
+    #         X[i] = np.zeros_like(x)
 
-    n_objs = int(n_lcs/6)
-    #reshape vectors so the ones belonging to the same object are grouped into 6 channels
-    X_per_band = X.reshape((n_objs,6,length)).astype(np.float32)
+    # n_objs = int(n_lcs/n_channels)
+    # #reshape vectors so the ones belonging to the same object are grouped into 6 channels
+    # X_per_band = X.reshape((n_objs,n_channels,length)).astype(np.float32)
 
-    #get distance for each point to nearest real point
-    X_void = np.zeros((n_lcs, x.shape[0]))
-    t=range(length)
-    for i in t:
-        X_void[:, i] = np.abs((unstack["scaled_time"] - i)).min(axis = 1).fillna(500)
+    # #get distance for each point to nearest real point
+    # X_void = np.zeros((n_lcs, x.shape[0]))
+    # t=range(length)
+    # for i in t:
+    #     X_void[:, i] = np.abs((unstack["scaled_time"] - i)).min(axis = 1).fillna(500)
 
-    #reshape vectors so the ones belonging to the same object are grouped into 6 channels
-    X_void_per_band = X_void.reshape((n_objs,6,length)).astype(np.float32)
-    vectors = np.concatenate((X_per_band,X_void_per_band),axis=1)
-    return vectors, obj_ids, tags.true_target.values
+    # #reshape vectors so the ones belonging to the same object are grouped into 6 channels
+    # X_void_per_band = X_void.reshape((n_objs,n_channels,length)).astype(np.float32)
+    # vectors = np.concatenate((X_per_band,X_void_per_band),axis=1)
+    # return vectors, 
+    return merged.object_id.unique()
 
 
 def append_vectors(dataset,outputFile):
