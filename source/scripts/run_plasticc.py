@@ -7,18 +7,10 @@ import time
 import h5py
 import os, sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from datasets import CachedLCs, LCs
-from data_samplers import CachedRandomSampler
-from experiment import SeededExperiment
-# from plot_utils import *
+from datasets import  LCs
+from seeded_experiment import SeededExperiment
 from torchvision import transforms
-from transforms import RandomCrop,ZeroPad,RightCrop,RandomCropsZeroPad
-from recurrent_models import GRU1D
 from convolutional_models import FCNN1D, ResNet1D
-# from seeded_experiment import SeededExperiment
-from experiment import Experiment
-
-from torch.utils.data import RandomSampler
 
 results_dir = "../../results/"
 data_dir = "../../data/plasticc/interpolated/"
