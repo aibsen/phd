@@ -1,3 +1,4 @@
+from sqlite3 import paramstyle
 import numpy as np
 import pandas as pd
 import torch
@@ -8,7 +9,7 @@ import os, sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from datasets import CachedLCs, LCs
 from data_samplers import CachedRandomSampler
-from experiment import Experiment
+from experiment import SeededExperiment
 # from plot_utils import *
 from torchvision import transforms
 from transforms import RandomCrop,ZeroPad,RightCrop,RandomCropsZeroPad
@@ -20,8 +21,8 @@ from experiment import Experiment
 from torch.utils.data import RandomSampler
 
 results_dir = "../../results/"
-data_dir = "../../data/plasticc/interpolated/training/plasticc_train_data.h5"
-exp_name = "plasticc_vanilla2"
+data_dir = "../../data/plasticc/interpolated/"
+exp_name = "plasticc_vanilla_fcn"
 
 
 lc_length = 128
@@ -34,63 +35,44 @@ seeds = [1772670]
 seed=torch.cuda.manual_seed(seed=1772670)
 n_seeds = 1
 
+
+####Vanilla Plasticc
+training_data_file=data_dir+'training/plasticc_train_data.h5'
+train_dataset = LCs(lc_length, training_data_file)
+input_shape = train_dataset[0][0].shape
+
+test_data_file = data_dir+'test/plasticc_test_data_batch1.h5'
+test_dataset = LCs(lc_length, test_data_file)
+
+fcn_params = {
+    "input_shape" : input_shape,
+    "num_output_classes":14    
+}
+
+
+network = FCNN1D(fcn_params)
+
 exp_params={
+    "network_model": network,
     "num_epochs" : num_epochs,
     "learning_rate" : lr,
     "weight_decay_coefficient" : wdc,
     "use_gpu" : use_gpu,
     "batch_size" : batch_size,
-    "num_output_classes": 14
+    "num_output_classes": 14,
+    "patience":5,
+    "validation_step":3
 }
 
-
-####Vanilla Plasticc
-training_data_file=data_dir+'plasticc_train_data.h5'
-train_dataset = LCs(lc_length, training_data_file)
-input_shape = train_dataset[0][0].shape
-
-fcn_params = {
-    "global_pool" : 'max',
-    "input_shape" : (12,128),
-    
-}
-
-gru_params = {
-    "hidden_size":100,
-    "input_shape" : (12,128),
-    }
-
-grusa_params = {
-    "hidden_size":100,
-    "attention":"additive",
-    "da":50,
-    "r":1,
-
-}
-resnet_params = {
-    "global_pool":'max',
-}
-
-
-params = [fcn_params, resnet_params, gru_params, grusa_params]
-
-for m,param in enumerate(params): #for each model in the experiment 
-    param["input_shape"] = input_shape
-    param["num_output_classes"] = 14
-
-    network = FCNN1D(param)
-    exp_n = exp_name#+"_resnet"
-    experiment = Experiment(
-        network_model=network,
-        experiment_name=results_dir+exp_n,
-        num_epochs=10,
-        train_data=train,
-        val_data=val,
-        test_data=test
-        # class_weights = class_weights
+experiment = SeededExperiment( 
+    exp_name,
+    exp_params = exp_params,
+    seeds = [1772670],
+    train_data=train_dataset,
+    test_data=test_dataset
     )
-    experiment.run_experiment()
-    break
+
+experiment.run_experiment()
 
 
 

@@ -44,7 +44,7 @@ class FCNN1D(nn.Module):
         self.layer_dict['conv_block_1'] = Conv1DBlock(in_channels=128,ks=5,n_filters=256)
         self.layer_dict['conv_block_2'] = Conv1DBlock(in_channels=256,ks=3,n_filters=128)
 
-        self.layer_dict["dropout"] = torch.nn.Dropout(p=0.2)
+        self.dropout = torch.nn.Dropout(p=0.2)
         self.layer_dict["linear"] = nn.Linear(in_features=128,out_features=self.params['num_output_classes'])
 
 
