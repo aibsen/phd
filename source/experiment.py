@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import tqdm
-import os
+import os,sys
 import numpy as np
 import pandas as pd
 import time
@@ -165,7 +165,11 @@ class Experiment(nn.Module):
         start_time = time.time()
         data = data if data else self.test_data
         if load_model:
-            self.load_model(model_save_dir=self.experiment_saved_models, model_save_name=model_name)
+            try:
+                self.load_model(model_save_dir=self.experiment_saved_models, model_save_name=model_name)
+            except Exception as e:
+                self.run_final_train_phase()
+
         results_cm = torch.zeros((len(data.dataset),3), dtype=torch.int64, device = self.device) # holds ids, preds, targets
         results_probs = torch.zeros((len(data.dataset),self.num_output_classes+1), dtype=torch.double, device = self.device) # holds ids, probability predictions
         running_loss = 0.0

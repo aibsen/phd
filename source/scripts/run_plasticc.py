@@ -9,12 +9,12 @@ import os, sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from datasets import  LCs
 from seeded_experiment import SeededExperiment
-from torchvision import transforms
+from transforms import GroupClass
 from convolutional_models import FCNN1D, ResNet1D
 
 results_dir = "../../results/"
 data_dir = "../../data/plasticc/interpolated/"
-exp_name = "plasticc_vanilla_fcn"
+exp_name = results_dir+"plasticc_vanilla_fcn"
 
 
 lc_length = 128
@@ -34,11 +34,12 @@ train_dataset = LCs(lc_length, training_data_file)
 input_shape = train_dataset[0][0].shape
 
 test_data_file = data_dir+'test/plasticc_test_data_batch1.h5'
-test_dataset = LCs(lc_length, test_data_file)
+transform = GroupClass(14,14)
+test_dataset = LCs(lc_length, test_data_file, transform=transform)
 
 fcn_params = {
     "input_shape" : input_shape,
-    "num_output_classes":14    
+    "num_output_classes":15    
 }
 
 
@@ -51,7 +52,7 @@ exp_params={
     "weight_decay_coefficient" : wdc,
     "use_gpu" : use_gpu,
     "batch_size" : batch_size,
-    "num_output_classes": 14,
+    "num_output_classes": 15,
     "patience":5,
     "validation_step":3
 }
@@ -59,7 +60,7 @@ exp_params={
 experiment = SeededExperiment( 
     exp_name,
     exp_params = exp_params,
-    seeds = [1772670],
+    seeds = [1772670, 123],
     train_data=train_dataset,
     test_data=test_dataset
     )

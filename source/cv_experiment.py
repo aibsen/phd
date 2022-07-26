@@ -41,7 +41,6 @@ class CVExperiment(nn.Module):
         self.test_data = test_data
         self.best_val_fold = None
         self.best_fold = None
-        # self.batch_size = self.exp_params['batch_size']
         self.mean_best_epoch = None
         
         if train_data:
@@ -72,10 +71,10 @@ class CVExperiment(nn.Module):
     def run_experiment(self, test_data_name="test"):
         if self.train_data:
             self.run_train_phase()
-        if self.train_data and self.test_data:
+        # if self.train_data and self.test_data:
             self.run_final_train_phase()
-            self.run_test_phase(test_data_name)
-        elif self.test_data:
+            # self.run_test_phase(test_data_name)
+        if self.test_data:
             self.run_test_phase(test_data_name)
 
     def run_train_phase(self):
@@ -117,9 +116,11 @@ class CVExperiment(nn.Module):
             weight_decay_coefficient = self.exp_params["weight_decay_coefficient"],
             batch_size = self.exp_params["batch_size"],
             num_output_classes=self.exp_params["num_output_classes"],
+            patience = self.exp_params["patience"],
+            validation_step = self.exp_params["validation_step"]
         )
 
-        train_loader = torch.utils.data.DataLoader(self.train_data, batch_size=self.batch_size, shuffle=True)
+        train_loader = torch.utils.data.DataLoader(self.train_data, batch_size=self.exp_params["batch_size"], shuffle=True)
         start_time = time.time()
         # print(self.mean_best_epoch)
         if not self.mean_best_epoch:
@@ -138,7 +139,7 @@ class CVExperiment(nn.Module):
             num_output_classes= self.exp_params["num_output_classes"],
         )
 
-        test_loader = torch.utils.data.DataLoader(self.test_data, batch_size=self.batch_size, shuffle=True)
+        test_loader = torch.utils.data.DataLoader(self.test_data, batch_size=self.exp_params["batch_size"], shuffle=True)
         # start_time = time.time()
         experiment.run_test_phase(data=test_loader,data_name=test_data_name)
         # print("--- %s seconds ---" % (time.time() - start_time))
