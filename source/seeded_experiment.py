@@ -82,9 +82,9 @@ class SeededExperiment(nn.Module):
 
         if self.train_data:
             self.save_seed_statistics("validation_summary.csv")
+            self.save_seed_statistics("final_training_summary.csv")
 
         if self.test_data:
-            self.save_seed_statistics("final_training_summary.csv")
             self.save_seed_statistics("test_summary.csv")
 
         if self.verbose:
@@ -95,7 +95,6 @@ class SeededExperiment(nn.Module):
             for i, seed in enumerate(self.seeds):
                 torch.cuda.manual_seed(seed=seed)
                 print("Starting test phase, seed: "+str(seed))
-                exp_name = self.experiment_folder+"/seed_"+str(seed)
                 self.cv_experiments[i].run_test_phase(test_data_name=test_data_name)
     
     def get_seeds_from_folders(self):

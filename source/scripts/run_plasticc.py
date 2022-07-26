@@ -19,7 +19,7 @@ exp_name = results_dir+"plasticc_vanilla_fcn"
 
 lc_length = 128
 batch_size = 64
-num_epochs = 10
+num_epochs = 100
 use_gpu = True
 lr = 1e-03
 wdc = 1e-03
@@ -33,15 +33,10 @@ training_data_file=data_dir+'training/plasticc_train_data.h5'
 train_dataset = LCs(lc_length, training_data_file)
 input_shape = train_dataset[0][0].shape
 
-test_data_file = data_dir+'test/plasticc_test_data_batch1.h5'
-transform = GroupClass(14,14)
-test_dataset = LCs(lc_length, test_data_file, transform=transform)
-
 fcn_params = {
     "input_shape" : input_shape,
     "num_output_classes":15    
 }
-
 
 network = FCNN1D(fcn_params)
 
@@ -60,13 +55,19 @@ exp_params={
 experiment = SeededExperiment( 
     exp_name,
     exp_params = exp_params,
-    seeds = [1772670, 123],
-    train_data=train_dataset,
-    test_data=test_dataset
+    seeds = [1772670, 123, 1602],
+    train_data=train_dataset
     )
 
 experiment.run_experiment()
 
+transform = GroupClass(14,14)
+
+for i in range(1,12):
+    test_data_file = data_dir+'test/plasticc_test_data_batch{}.h5'.format(i)
+    test_dataset = LCs(lc_length, test_data_file, transform=transform)
+    experiment.run_test_phase(test_data_name='test_batch{}'.format(i))
+    
 
 
     # if m == 0: #fcn
