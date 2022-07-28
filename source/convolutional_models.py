@@ -125,11 +125,12 @@ class ResNet1D(nn.Module):
         self.layer_dict["res_block_0"] = ResNet1DBlock(in_channels=in_channels, n_filters=64)
         self.layer_dict["res_block_1"] = ResNet1DBlock(in_channels=64, n_filters=128)
         self.layer_dict["res_block_2"] = ResNet1DBlock(in_channels=128, n_filters=128)
-        if self.params["global_pool"] == "max":
-            self.global_pool = torch.nn.MaxPool1d(2)
-        elif self.params["global_pool"] == "avg":
-            self.global_pool = torch.nn.AvgPool1d(2)
-        # self.layer_dict['linear'] = nn.Linear(in_features=int(128*self.params["input_shape"][1]/2),
+        # if self.params["global_pool"] == "max":
+        self.global_pool = torch.nn.MaxPool1d(2)
+        # elif self.params["global_pool"] == "avg":
+            # self.global_pool = torch.nn.AvgPool1d(2)
+        out_features=self.params['num_output_classes']
+        self.layer_dict['linear'] = nn.Linear(in_features=int(128*self.params["input_shape"][1]/2),out_features=int(out_features))
             # out_features=self.params['num_output_classes'])
 
     def forward(self, x):
@@ -140,7 +141,7 @@ class ResNet1D(nn.Module):
         out = out.permute(0,2,1)
         out = self.global_pool(out)
         out = out.contiguous().view(out.shape[0], -1)
-        # out = self.layer_dict["linear"](out)
+        out = self.layer_dict["linear"](out)
         return out
 
     def reset_parameters(self):

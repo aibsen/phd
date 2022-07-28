@@ -76,7 +76,7 @@ class SeededExperiment(nn.Module):
     def run_experiment(self):
         start_time = time.time()
         for i, seed in enumerate(self.seeds):
-            torch.cuda.manual_seed(seed=seed)
+            torch.manual_seed(seed=seed)
             print("Starting experiment, seed: "+str(seed))
             self.cv_experiments[i].run_experiment()
 
@@ -93,9 +93,11 @@ class SeededExperiment(nn.Module):
     def run_test_phase(self, test_data_name = 'test'):
         if len(self.cv_experiments) > 0:
             for i, seed in enumerate(self.seeds):
-                torch.cuda.manual_seed(seed=seed)
+                torch.manual_seed(seed=seed)
                 print("Starting test phase, seed: "+str(seed))
+                self.cv_experiments[i].test_data = self.test_data
                 self.cv_experiments[i].run_test_phase(test_data_name=test_data_name)
+                del self.cv_experiments[i].test_data
     
     def get_seeds_from_folders(self):
         rootdir = self.experiment_folder
