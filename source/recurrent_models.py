@@ -39,6 +39,7 @@ class GRU1D(nn.Module):
         self.layer_dict = nn.ModuleDict()
         
         self.h_in = self.params['input_shape'][0]
+        self.sequence_length = self.params['input_shape'][1]
         self.h_out = self.params["hidden_size"]
         self.n_layers = n_layers if 'n_layers' not in self.params.keys() else self.params['n_layers']
         dropout = dropout if 'dropout' not in self.params.keys() else self.params['dropout']
@@ -47,26 +48,41 @@ class GRU1D(nn.Module):
         self.layer_dict['bn'] = nn.BatchNorm1d(self.h_out)
         self.dropout = torch.nn.Dropout(dropout)
 
-        if 'attention' in self.params.keys():
-            self.layer_dict['attn'] = AdditiveAttention1D(self.params)
-
-        r = 1 if 'r' not in self.params.keys() else self.params['r'] 
-
-        self.layer_dict['linear'] = nn.Linear(in_features=self.h_out,out_features=self.params['num_output_classes'])
+        self.r = 1 
         
+        if 'attention' in self.params.keys():
+            self.r = 1 if 'r' not in self.params.keys() else self.params['r'] 
+            self.layer_dict['attn'] = AdditiveAttention1D(self.params, r=self.r)
+
+        self.layer_dict['linear'] = nn.Linear(in_features=self.h_out*self.r,out_features=self.params['num_output_classes'])
+
+        a = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        print(a)
 
     def forward(self, x):
-        out = x.permute(0,2,1)
+        out = x[0].permute(0,2,1)
+        lens = x[1]
+        out = nn.utils.rnn.pack_padded_sequence(out,lens,batch_first=True,enforce_sorted=False)
         out, h = self.layer_dict['gru'](out)
+        # print(out.shape)
+        out, lens = nn.utils.rnn.pad_packed_sequence(out,batch_first=True,total_length=self.sequence_length)
         out = out.permute(0,2,1)
         out = self.layer_dict['bn'](out)
         out = out.permute(0,2,1)
+        print(out.shape)
         if 'attn' in self.layer_dict.keys(): 
             out = self.layer_dict['attn'](out)
+            print(out.shape)
+            out = out.view(out.shape[0],self.r*self.h_out)
+            print(out.shape)
+            out = self.dropout(out)
+        else:
+            out = self.dropout(out)
+            print(out.shape)
+            out = out[:,-1,:]
 
-        out = self.dropout(out)
-        last = out[:,-1,:]
-        out = self.layer_dict['linear'](last)
+        out = self.layer_dict['linear'](out)
+        print(out.shape)
         return out
 
     def reset_gru_layer(self):

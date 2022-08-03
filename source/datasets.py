@@ -5,7 +5,7 @@ import h5py
 import random
 
 class LCs(Dataset):
-    def __init__(self, lc_length, dataset_h5,n_channels=12,transform=None, n_classes=14):
+    def __init__(self, lc_length, dataset_h5,n_channels=12,transforms=None, n_classes=14,packed=False):
 
         self.lc_length = lc_length
         self.dataset_h5 = dataset_h5
@@ -13,11 +13,13 @@ class LCs(Dataset):
         self.X = None
         self.Y = None
         self.ids = None
-        self.transform = transform
+        self.transforms = transforms
         self.length = None
         self.n_channels = n_channels
         self.targets = None
         self.n_classes=n_classes
+        self.lens = None
+        self.packed = packed
 
         try:
             with h5py.File(self.dataset_h5,'r') as f:
@@ -34,42 +36,56 @@ class LCs(Dataset):
         return self.length
 
     def __getitem__(self, idx):
-
         if self.X is None:
             self.load_data_into_memory()
-        
-        if self.transform:
-            # print(sample.shape)
-            sample = self.X[idx],self.Y[idx], self.ids[idx]
-            X,Y,ids = self.transform(sample)
-            # print(X.shape)
-            # print(Y)
-            # print(ids)
-            return X,Y,ids
-        # else:
+        if self.packed:
+            return (self.X[idx],self.lens[idx]),self.Y[idx], self.ids[idx]
         return self.X[idx],self.Y[idx], self.ids[idx]
+        
 
     def load_data_into_memory(self):
         print("loading data into memmory")
 
         try:
             with h5py.File(self.dataset_h5,'r') as f:
-                # X = f["X"][:,0:self.n_channels,0:self.lc_length]
                 X = f["X"][:,0:self.n_channels]
                 Y = f["Y"]
                 ids = f["ids"]
-                # self.X = torch.tensor(X,dtype=torch.float)
                 self.X = torch.tensor(X, device = self.device, dtype=torch.float)
-                # self.ids = torch.tensor(ids, dtype=torch.int)
                 self.ids = torch.tensor(ids, device = self.device, dtype=torch.long)
                 self.Y = torch.tensor(Y, device = self.device, dtype=torch.long)
-                # self.Y = torch.tensor(Y, dtype=torch.long)
-                # print(ids)
         except Exception as e:
             print(e)
 
     def get_samples_per_class(self):
         return [self.targets.count(i) for i in range(self.n_classes)]
+
+    def crop_pad(self, fractions=[0.5], croppings=[0.5]):
+        if self.X is None:
+            self.load_data_into_memory()
+        assert(sum(fractions)<=1)
+        assert(len(croppings)==len(fractions))
+        random_idxs = np.random.choice(range(self.length), size=int(self.length*sum(fractions)), replace=False)
+        i=0
+        lens = torch.full((self.X.shape[0],),self.lc_length)
+        for j,f in enumerate(fractions):
+            i_new = int(i+len(random_idxs)*f)
+            to_crop = random_idxs[i:i_new]
+            cut_length = int(self.lc_length*croppings[j])
+            padding = torch.nn.ConstantPad1d((0,self.lc_length-cut_length),0)
+            self.X[to_crop] = padding(self.X[to_crop,:,0:cut_length])
+            lens[to_crop]=cut_length
+            i+=i_new
+        self.lens=lens
+        # self.packed=True
+
+    def apply_tranforms(self):
+        if self.transforms:
+            for transform in self.transforms:
+                sample = self.X,self.Y, self.ids
+                self.X, self.Y, self.ids, self.lens = transform(sample)
+                # if self.lens is not None:
+                    # self.packed = True
 
     def get_items(self,idxs):
         X = self.X[idxs]
@@ -87,8 +103,7 @@ class CachedLCs(Dataset):
         self.chunk_size = chunk_size
         self.dataset_file = dataset_file
 
-        self.X = None
-        self.Y = None
+        self.X = None_da
         self.ids = None
 
         self.transform = transform

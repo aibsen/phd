@@ -92,3 +92,58 @@ class GroupClass(object):
         if Y >= self.initial_class:
             Y=torch.tensor(self.final_class,device=Y.device)
         return X,Y,obid
+
+class GroupClassTensor(object):
+    def __init__(self,initial_class,final_class):
+        self.initial_class = initial_class
+        self.final_class = final_class
+
+    def __call__(self,tensor):
+        print("clustering a bunch of classes into one")
+        X,Y,obid=tensor
+        Y = torch.where(Y<self.initial_class, Y, self.final_class)
+        print(torch.unique(Y))
+        print("done!")
+        return X,Y,obid, None
+
+class CropPadTensor(object):
+    def __init__(self,lc_length,cropping=0.5,padding=0):
+        self.lc_length = lc_length
+        self.output_size = int(cropping*self.lc_length)
+
+    def __call__(self, sample):
+        print("cropping and padding everything")
+        X,Y,obid=sample
+        assert X.shape[-1] <= self.lc_length
+        X=X[:,:,0:self.output_size]
+        padding=torch.nn.ConstantPad1d((0,self.lc_length-self.output_size),0)
+        X = padding(X)
+        lens=torch.full((X.shape[0],),self.output_size)
+        print("done!")
+        return X, Y, obid, lens
+
+class MultiCropPadTensor(object):
+    def __init__(self, lc_length, fractions, croppings):
+        assert(sum(fractions)<=1)
+        assert(len(croppings)==len(fractions))
+        self.lc_length = lc_length
+        self.fractions = fractions
+        self.croppings = croppings
+
+    def __call__(self,sample):
+        print("applying multiple croppings/paddings")
+        X,Y,obid=sample
+        length = len(Y)
+        random_idxs = np.random.choice(range(length), size=int(length*sum(self.fractions)), replace=False)
+        i=0
+        lens = torch.full((length,),self.lc_length)
+        for j,f in enumerate(self.fractions):
+            i_new = int(i+len(random_idxs)*f)
+            to_crop = random_idxs[i:i_new]
+            cut_length = int(self.lc_length*self.croppings[j])
+            padding = torch.nn.ConstantPad1d((0,self.lc_length-cut_length),0)
+            X[to_crop] = padding(X[to_crop,:,0:cut_length])
+            lens[to_crop]=cut_length
+            i+=i_new
+        print("done!")
+        return X, Y,obid,lens
