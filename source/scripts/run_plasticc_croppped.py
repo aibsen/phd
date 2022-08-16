@@ -1,4 +1,5 @@
 from sqlite3 import paramstyle
+from struct import pack
 import numpy as np
 import pandas as pd
 import torch
@@ -9,13 +10,13 @@ import os, sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from datasets import  LCs
 from seeded_experiment import SeededExperiment
-from transforms import GroupClass, GroupClassTensor
+from transforms import CropPadTensor, GroupClass, GroupClassTensor, MultiCropPadTensor
 from convolutional_models import FCNN1D, ResNet1D
 from recurrent_models import GRU1D
 
 results_dir = "../../results/"
 data_dir = "../../data/plasticc/interpolated/"
-exp_name = results_dir+"plasticc_test_grusa_eg"
+exp_name = results_dir+"plasticc_cropped_gru_eg"
 
 
 lc_length = 128
@@ -27,32 +28,38 @@ wdc = 1e-02
 seeds = [1772670]
 # seed=torch.cuda.manual_seed(seed=1772670)
 n_seeds = 1
-num_classes = 9 
+
 
 ####Vanilla Plasticc
+# training_data_file=data_dir+'training/plasticc_train_data.h5'
 training_data_file=data_dir+'test/plasticc_test_data_batch2_extragalactic.h5'
-# training_data_file=data_dir+'training/plasticc_train_data_augmented_extragalactic.h5'
-train_dataset = LCs(lc_length, training_data_file, n_classes=num_classes)
+transform0 = GroupClassTensor(14,14)
+transform1 = MultiCropPadTensor(lc_length,fractions=[0.25,0.25],croppings=[0.5,0.25])
+train_dataset = LCs(lc_length, training_data_file, transforms=[transform0,transform1])
 train_dataset.load_data_into_memory()
-# train_dataset.apply_tranforms()
 input_shape = train_dataset[0][0].shape
-
-#for rnns
-train_dataset.packed=True
-train_dataset.lens=torch.full((len(train_dataset),),lc_length)
-
-print(len(train_dataset))
-
+train_dataset.apply_tranforms()
+train_dataset.packed = True
+# print(len(train_dataset))
+# torch.Size([12, 128])
+print(input_shape)
 
 nn_params = {
     "input_shape" : input_shape,
-    "num_output_classes":num_classes,
-    "hidden_size" : 100,
-    "attention" : True    
+    "num_output_classes":15,
+    "hidden_size" : 100
+    # "attention" : True    
 }
 
-network = GRU1D(nn_params)
 
+# data_loader=torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+network = GRU1D(nn_params).to(torch.device('cuda'))
+
+
+# for (x,y,ids) in data_loader:
+    # print(x)
+    # network.forward(x)
+    # break
 exp_params={
     "network_model": network,
     "num_epochs" : num_epochs,
@@ -60,7 +67,7 @@ exp_params={
     "weight_decay_coefficient" : wdc,
     "use_gpu" : use_gpu,
     "batch_size" : batch_size,
-    "num_output_classes": num_classes,
+    "num_output_classes": 15,
     "patience":5,
     "validation_step":3
 }
@@ -75,19 +82,18 @@ experiment = SeededExperiment(
 experiment.run_experiment()
 
 
+transform2 = CropPadTensor(lc_length,cropping=0.25)
+
 for i in range(3,12):
     test_data_file = data_dir+'test/plasticc_test_data_batch{}_extragalactic.h5'.format(i)
-    test_dataset = LCs(lc_length, test_data_file)
+    test_dataset = LCs(lc_length, test_data_file, transforms=[transform0, transform2])
     print("loading dataset")
     test_dataset.load_data_into_memory()
-#     test_dataset.apply_tranforms()
-#for rnns
+    test_dataset.apply_tranforms()
     test_dataset.packed = True
-    test_dataset.lens=torch.full((len(test_dataset),),lc_length)
-
     print(torch.cuda.mem_get_info(device=None))
     experiment.test_data = test_dataset
-    experiment.run_test_phase(test_data_name='test_batch{}'.format(i))
+    experiment.run_test_phase(test_data_name='test_batch{}_0.25'.format(i))
     del test_dataset
     del experiment.test_data
     torch.cuda.empty_cache()

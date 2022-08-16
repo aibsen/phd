@@ -36,11 +36,14 @@ class LCs(Dataset):
         return self.length
 
     def __getitem__(self, idx):
-        if self.X is None:
-            self.load_data_into_memory()
+    #     if self.X is None:
+    #         self.load_data_into_memory()
         if self.packed:
             return (self.X[idx],self.lens[idx]),self.Y[idx], self.ids[idx]
         return self.X[idx],self.Y[idx], self.ids[idx]
+        
+    # def __getitem__(self, idx):
+        # return self.X[idx],self.Y[idx], self.ids[idx]
         
 
     def load_data_into_memory(self):
@@ -86,6 +89,7 @@ class LCs(Dataset):
                 self.X, self.Y, self.ids, self.lens = transform(sample)
                 # if self.lens is not None:
                     # self.packed = True
+
 
     def get_items(self,idxs):
         X = self.X[idxs]

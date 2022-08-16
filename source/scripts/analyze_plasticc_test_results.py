@@ -7,9 +7,9 @@ from datasets import LCs
 
 
 results_dir = "../../results/"
-exp_name = '3_24x24final_followup'
+# exp_name = 'plasticc_cropped_gru/seed_1772670'
+exp_name = 'plasticc_test_grusa_eg/seed_1772670'
 where = results_dir+exp_name+'/result_outputs/'
-run_number = '15'
 data_dir_train = "/home/ai/phd/data/plasticc/dmdt/training/"
 data_dir_csv = "/home/ai/phd/data/plasticc/csvs/"
 
@@ -18,19 +18,19 @@ def merge_files():
     probabilities = []
     
     for i in range(3,12):
-        predictions_fn = where+'test_{}_{}_results.csv'.format(i,run_number)
+        predictions_fn = where+'test_batch{}_results.csv'.format(i)
         pred = pd.read_csv(predictions_fn)
         predictions.append(pred)
         
-        probabilities_fn = where+'test_{}_{}_probabilities.csv'.format(i,run_number)
+        probabilities_fn = where+'test_batch{}_probabilities.csv'.format(i)
         prob = pd.read_csv(probabilities_fn)
         probabilities.append(prob)
         
     all_predictions = pd.concat(predictions, axis=0, ignore_index=True)
-    all_predictions.to_csv(where+"all_test_results_{}.csv".format(run_number),sep=',',index=False)
+    all_predictions.to_csv(where+"all_test_results.csv",sep=',',index=False)
 
     all_probabilities = pd.concat(probabilities, axis=0, ignore_index=True)
-    all_probabilities.to_csv(where+"all_test_probabilities_{}.csv".format(run_number),sep=',',index=False)
+    all_probabilities.to_csv(where+"all_test_probabilities.csv",sep=',',index=False)
 
 
 def overall_summary(csv_results,csv_probabilities):
@@ -40,9 +40,9 @@ def overall_summary(csv_results,csv_probabilities):
 
     targets = results.target
     # print(targets.values)
-    f1_macro = f1_score(targets, predictions, average='macro')
-    f1_no_99 = f1_score(targets, predictions,labels=range(0,14), average='macro') # 0.3506195828251394
-    f1_sn = f1_score(targets, predictions, labels=range(0,6),average='macro') #0.1966493728416829
+    f1_macro = f1_score(targets, predictions, average='weighted')
+    f1_no_99 = f1_score(targets, predictions,labels=range(0,9), average='weighted') # 0.3506195828251394
+    f1_sn = f1_score(targets, predictions, labels=range(0,6),average='weighted') #0.1966493728416829
     #no 99 f1: 0.354, sn only: 0.2123
     print("f1 : "+str(f1_macro))
     print("f1 without 99 : "+str(f1_no_99))
@@ -51,11 +51,12 @@ def overall_summary(csv_results,csv_probabilities):
     accuracy = accuracy_score(targets, predictions)
     print("accuracy : "+str(accuracy)) #no 99 0.572
 
-    precision = precision_score(targets, predictions,average='micro')
-    recall = recall_score(targets, predictions,average='micro')
+    precision = precision_score(targets, predictions,average='weighted')
+    recall = recall_score(targets, predictions,average='weighted')
 
     # weight_code = [1,1,1,1,1,1,2,2,1,1,1,1,1,1]
-    weight_code = [1,1,1,1,1,1,2,2,1,1,1,1,1,1,2,2,2,2]
+    weight_code = [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+    # weight_code = [1,1,1,1,1,1,2,2,1,1,1,1,1,1,2,2,2,2]
     weights = [weight_code[i] for i in targets.values] 
     # print(probabilities.values.shape)
     # print(targets.shape)
@@ -70,14 +71,15 @@ def overall_summary(csv_results,csv_probabilities):
     # print("loss without 99: "+str(loss_no_99))
 
     metrics = pd.DataFrame({'accuracy': accuracy, 'loss':loss,"f1":f1_macro, "precision":precision, "recall": recall},index=[0])
-    metrics.to_csv(where+"all_summary_test_{}.csv".format(run_number),index=False)
+    metrics.to_csv(where+"all_summary_test_micro.csv",index=False)
 
 def overall_cm(csv_results,output_name):
     out = where+output_name
     results = pd.read_csv(where+csv_results)
     predictions = results.prediction
     targets = results.target
-    plot_best_val_cm(targets,predictions,save=True, output_file=out,names=plasticc_names,normalized=True)
+    # print(plasticc_names)
+    plot_best_val_cm(targets,predictions,save=True, output_file=out,names=plasticc_names,normalized=False)
 
  
 
@@ -90,19 +92,20 @@ plasticc_type_dict = {
     '95':'SLSN',
     '15':'TDE',
     '64':'KN',
-    '88':'AGN',
-    '92':'RRL',
-    '65':'M-dwarf',
-    '16':'EB',
-    '53':'Mira',
-    '6':'uLens-Single',
-    '99':'Class 99'
-    # '991':'uLens-Binary',
+    '88':'AGN'
+    # '92':'RRL',
+    # '65':'M-dwarf',
+    # '16':'EB',
+    # '53':'Mira',
+    # '6':'uLens-Single',
+    # '99':'Class 99'
+    # # '991':'uLens-Binary',
     # '992':'ILOT',
     # '993':'CART',
     # '994': 'PISN'
 }
-plasticc_types = [90,67,52,42,62,95,15,64,88,92,65,16,53,6,99]
+plasticc_types = [90,67,52,42,62,95,15,64,88]
+#,92,65,16,53,6,99]
 plasticc_names = [plasticc_type_dict[k] for k in plasticc_type_dict]
 
 def probs_to_plasticc_format(csv_probs):
@@ -127,9 +130,23 @@ def how_many():
     train_metadata = pd.read_csv(train_metadata_fn)
     print(train_metadata.groupby('true_target').count())
 
-merge_files()
-overall_summary('all_test_results_{}.csv'.format(run_number),'all_test_probabilities_{}.csv'.format(run_number))
-overall_cm('all_test_results_{}.csv'.format(run_number),'all_cm_{}.png'.format(run_number))
-# probs_to_plasticc_format('all_test_probabilities_tame.csv')
+def compare_cms(exp_names,names,classes,output_name):
+    # files = [results_dir+exp_name+'/seed_1772670/result_outputs/test_1_results.csv' for exp_name in exp_names]
+    files = [results_dir+exp_name+'/result_outputs/test_0.25_2_results.csv' for exp_name in exp_names]
+    out = results_dir+output_name
+    plot_cms(files,2,2, subtitles=names,classes=classes, 
+        save=True,
+        output_file=out)
 
-# how_many()
+
+
+# merge_files()
+# overall_summary('all_test_results.csv','all_test_probabilities.csv')
+overall_cm('all_test_results.csv','all_cm_real.png')
+
+# names = ["FCN","FCN", "ResNet","ResNet", "RNN","RNN", "RNN-SA","RNN-SA"]
+# names = ["FCN", "ResNet", "RNN", "RNN-SA"]
+# exp_names = ["plasticc_{}".format(model) for model in ["vanilla_fcn_eg","test_fcn_eg","vanilla_resnet_eg","test_resnet_eg","vanilla_gru_eg","test_gru_eg","vanilla_grusa_eg","test_grusa_eg"]]
+# exp_names = ["plasticc_balanced_cropped_{}".format(model) for model in ["fcn","resnet","gru","grusa"]]
+# compare_cms(exp_names,names,plasticc_names,"plasticc_balanced_cropped_0.25_2.png")
+

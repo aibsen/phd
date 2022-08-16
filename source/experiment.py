@@ -161,8 +161,10 @@ class Experiment(nn.Module):
         results_df.to_csv(self.experiment_logs+'/'+fn,sep=',',index=False)
 
 
-    def run_test_phase(self, data=None, model_name="final_model.pth.tar",data_name="test",load_model=True):
+    def run_test_phase(self, data=None, save_name="",model_name=None,load_model=True):
         start_time = time.time()
+
+        model_name = model_name if model_name else "final_model{}.pth.tar".format(save_name)
         data = data if data else self.test_data
         # for param in self.model.parameters():
         #     print(param.data[0])
@@ -203,11 +205,12 @@ class Experiment(nn.Module):
         test_stats[0,4] = precision # precision
         test_stats[0,5] = recall #recall
 
+        data_name = "test{}".format(save_name)
         self.save_probabilities(results_probs, data_name+"_probabilities.csv")
         self.save_statistics(test_stats, data_name+"_summary.csv")
         self.save_results(results_cm, data_name+"_results.csv")
 
-    def run_final_train_phase(self, data_loaders=None,n_epochs=None, model_name="final_model.pth.tar", data_name = 'final_training'):
+    def run_final_train_phase(self, data_loaders=None,n_epochs=None, save_name=""):
         print(self.num_output_classes)
         start_time = time.time()
         n_epochs = n_epochs if n_epochs else self.best_epoch
@@ -251,6 +254,7 @@ class Experiment(nn.Module):
                 elapsed_time = time.time() - start_time  
                 pbar_train.set_description("Train loss: {:.3f}       , ET {:.2f}s".format(train_loss,elapsed_time))
                 
+        data_name = 'final_training{}'.format(save_name)
         self.save_statistics(train_stats, '{}_summary.csv'.format(data_name))
         self.save_results(last_train_cm, '{}_results.csv'.format(data_name))
         self.state = {
@@ -259,9 +263,10 @@ class Experiment(nn.Module):
             'optimizer':self.optimizer.state_dict(),
             'f1':f1
                     }
+        model_name = "final_model{}.pth.tar".format(save_name)
         self.save_model(model_name) 
         
-    def run_train_phase(self):
+    def run_train_phase(self,save_name=""):
         start_time = time.time()
 
         strike = 0
@@ -352,14 +357,14 @@ class Experiment(nn.Module):
                     break
 
         #save statistics at the end only
-        self.save_model("best_validation_model.pth.tar")
-        self.save_statistics(train_stats, 'training_summary.csv')
-        self.save_results(last_train_cm, 'training_results.csv')
-        self.save_statistics(val_stats, 'validation_summary.csv')
-        self.save_results(best_val_cm, 'validation_results.csv')
+        self.save_model("best_validation_model_{}.pth.tar".format(save_name))
+        self.save_statistics(train_stats, 'training_summary_{}.csv'.format(save_name))
+        self.save_results(last_train_cm, 'training_results_{}.csv'.format(save_name))
+        self.save_statistics(val_stats, 'validation_summary_{}.csv'.format(save_name))
+        self.save_results(best_val_cm, 'validation_results_{}.csv'.format(save_name))
     
     
-    def run_experiment(self):
+    def run_experiment(self,save_name=""):
         """
         Runs experiment train and evaluation iterations, saving the model and best val model and val model accuracy after each epoch
         :return: The summary current_epoch_losses from starting epoch to total_epochs.
@@ -368,14 +373,14 @@ class Experiment(nn.Module):
             print("")
             print("Starting training phase")
             print("")
-            self.run_train_phase()
+            self.run_train_phase(save_name=save_name)
             print("")
             print("Starting final training phase")
             print("")
-            self.run_final_train_phase()
+            self.run_final_train_phase(save_name=save_name)
 
         if self.test_data:
             print("")
             print("Starting test phase")
             print("")
-            self.run_test_phase(self.test_data)
+            self.run_test_phase(self.test_data,save_name=save_name)

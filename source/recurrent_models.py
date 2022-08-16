@@ -56,8 +56,7 @@ class GRU1D(nn.Module):
 
         self.layer_dict['linear'] = nn.Linear(in_features=self.h_out*self.r,out_features=self.params['num_output_classes'])
 
-        a = sum(p.numel() for p in self.parameters() if p.requires_grad)
-        print(a)
+
 
     def forward(self, x):
         out = x[0].permute(0,2,1)
@@ -69,20 +68,20 @@ class GRU1D(nn.Module):
         out = out.permute(0,2,1)
         out = self.layer_dict['bn'](out)
         out = out.permute(0,2,1)
-        print(out.shape)
+        # print(out.shape)
         if 'attn' in self.layer_dict.keys(): 
             out = self.layer_dict['attn'](out)
-            print(out.shape)
+            # print(out.shape)
             out = out.view(out.shape[0],self.r*self.h_out)
-            print(out.shape)
+            # print(out.shape)
             out = self.dropout(out)
         else:
             out = self.dropout(out)
-            print(out.shape)
+            # print(out.shape)
             out = out[:,-1,:]
 
         out = self.layer_dict['linear'](out)
-        print(out.shape)
+        # print(out.shape)
         return out
 
     def reset_gru_layer(self):
