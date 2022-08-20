@@ -46,12 +46,11 @@ class SeededExperiment(nn.Module):
 
 
     def save_seed_statistics(self,summary_file):
-        metrics = None
-        validation = summary_file == 'validation_summary.csv'
+        # validation = summary_file == 'validation_summary.csv'
         stats = {'epoch':[],'accuracy':[],'loss':[],'f1':[],'precision':[],'recall':[]}
 
-        if validation:
-            stats = {'mean_'+k: v for k, v in stats.items()}
+        # if validation:
+        stats = {'mean_'+k: v for k, v in stats.items()}
 
         for seed in self.seeds:
             exp_name = self.experiment_folder+"/seed_"+str(seed)+"/result_outputs"
@@ -59,17 +58,17 @@ class SeededExperiment(nn.Module):
             for k in stats.keys():
                 stats[k].append(summary.iloc[-1][k])
 
-        if validation:
-            mean_stats = {k: sum(v)/len(v) for k, v in stats.items()}
-            stds = {'std_'+k.split('_')[1]: np.std(v) for k, v in stats.items()}
-        else:
-            mean_stats = {'mean_'+k: sum(v)/len(v) for k, v in stats.items()}
-            stds = {'std_'+k: np.std(v) for k, v in stats.items()}
+        # if validation:
+        mean_stats = {k: sum(v)/len(v) for k, v in stats.items()}
+        stds = {'std_'+k.split('_')[1]: np.std(v) for k, v in stats.items()}
+        # else:
+            # mean_stats = {'mean_'+k: sum(v)/len(v) for k, v in stats.items()}
+            # stds = {'std_'+k: np.std(v) for k, v in stats.items()}
 
         stats_df = pd.concat([pd.DataFrame(mean_stats, index=[0]), pd.DataFrame(stds, index=[0])], axis=1)
-        if not validation:
-            keys = [ k for k in stats_df.keys() if 'epoch' not in k]
-            stats_df = stats_df[keys]
+        # if not validation:
+            # keys = [ k for k in stats_df.keys() if 'epoch' not in k]
+            # stats_df = stats_df[keys]
         
         stats_df.to_csv(self.experiment_logs+"/"+summary_file, index=False)
 
@@ -82,7 +81,6 @@ class SeededExperiment(nn.Module):
 
         if self.train_data:
             self.save_seed_statistics("validation_summary.csv")
-            self.save_seed_statistics("final_training_summary.csv")
 
         if self.test_data:
             self.save_seed_statistics("test_summary.csv")
@@ -90,14 +88,16 @@ class SeededExperiment(nn.Module):
         if self.verbose:
             print("--- %s seconds ---" % (time.time() - start_time))
 
-    def run_test_phase(self, test_data_name = 'test'):
+    def run_test_phase(self, save_name = 'test'):
         if len(self.cv_experiments) > 0:
             for i, seed in enumerate(self.seeds):
                 torch.manual_seed(seed=seed)
                 print("Starting test phase, seed: "+str(seed))
                 self.cv_experiments[i].test_data = self.test_data
-                self.cv_experiments[i].run_test_phase(test_data_name=test_data_name)
+                self.cv_experiments[i].run_test_phase(save_name=save_name)
                 del self.cv_experiments[i].test_data
+
+            self.save_seed_statistics("test{}_summary.csv".format(save_name))
     
     def get_seeds_from_folders(self):
         rootdir = self.experiment_folder

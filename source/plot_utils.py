@@ -368,6 +368,7 @@ def plot_best_val_cm(target, prediction, normalized=True, colormap=None, names=p
         plt.savefig(output_file)
     elif save:
         print("Need output_file argument")
+    return cm
 
 def plot_best_cms(results_dir = "../../results/",exp=2,part=1,count=3):
     

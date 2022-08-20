@@ -46,6 +46,7 @@ def filter_extragalactic_objects(input_filename, output_filename):
 
     except Exception as e:
         print(e)
+        
 def filter_extragalactic_objects_test():
     for i in range(3,12):
         # input_fn = input_filename+str(i)

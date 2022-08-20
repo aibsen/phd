@@ -8,80 +8,11 @@ from datasets import LCs
 
 results_dir = "../../results/"
 # exp_name = 'plasticc_cropped_gru/seed_1772670'
-exp_name = 'plasticc_test_grusa_eg/seed_1772670'
+exp_name = 'plasticc_test_resnet_sn/seed_1772670'
 where = results_dir+exp_name+'/result_outputs/'
 data_dir_train = "/home/ai/phd/data/plasticc/dmdt/training/"
 data_dir_csv = "/home/ai/phd/data/plasticc/csvs/"
 
-def merge_files():
-    predictions = []
-    probabilities = []
-    
-    for i in range(3,12):
-        predictions_fn = where+'test_batch{}_results.csv'.format(i)
-        pred = pd.read_csv(predictions_fn)
-        predictions.append(pred)
-        
-        probabilities_fn = where+'test_batch{}_probabilities.csv'.format(i)
-        prob = pd.read_csv(probabilities_fn)
-        probabilities.append(prob)
-        
-    all_predictions = pd.concat(predictions, axis=0, ignore_index=True)
-    all_predictions.to_csv(where+"all_test_results.csv",sep=',',index=False)
-
-    all_probabilities = pd.concat(probabilities, axis=0, ignore_index=True)
-    all_probabilities.to_csv(where+"all_test_probabilities.csv",sep=',',index=False)
-
-
-def overall_summary(csv_results,csv_probabilities):
-    results = pd.read_csv(where+csv_results)
-    predictions = results.prediction
-    probabilities = pd.read_csv(where+csv_probabilities).iloc[:,1:]
-
-    targets = results.target
-    # print(targets.values)
-    f1_macro = f1_score(targets, predictions, average='weighted')
-    f1_no_99 = f1_score(targets, predictions,labels=range(0,9), average='weighted') # 0.3506195828251394
-    f1_sn = f1_score(targets, predictions, labels=range(0,6),average='weighted') #0.1966493728416829
-    #no 99 f1: 0.354, sn only: 0.2123
-    print("f1 : "+str(f1_macro))
-    print("f1 without 99 : "+str(f1_no_99))
-    print("f1 sn only : "+str(f1_sn)) 
-
-    accuracy = accuracy_score(targets, predictions)
-    print("accuracy : "+str(accuracy)) #no 99 0.572
-
-    precision = precision_score(targets, predictions,average='weighted')
-    recall = recall_score(targets, predictions,average='weighted')
-
-    # weight_code = [1,1,1,1,1,1,2,2,1,1,1,1,1,1]
-    weight_code = [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
-    # weight_code = [1,1,1,1,1,1,2,2,1,1,1,1,1,1,2,2,2,2]
-    weights = [weight_code[i] for i in targets.values] 
-    # print(probabilities.values.shape)
-    # print(targets.shape)
-    loss = log_loss(targets,probabilities,sample_weight=weights) #1.65999785657598
-    loss_all_equal = log_loss(targets,probabilities) #1.6206824740333845
-
-
-    # loss_no_99 = log_loss(targets,probabilities,labels=range(0,14))
-    
-    print("loss : "+str(loss))
-    print("loss balanced: "+str(loss_all_equal))
-    # print("loss without 99: "+str(loss_no_99))
-
-    metrics = pd.DataFrame({'accuracy': accuracy, 'loss':loss,"f1":f1_macro, "precision":precision, "recall": recall},index=[0])
-    metrics.to_csv(where+"all_summary_test_micro.csv",index=False)
-
-def overall_cm(csv_results,output_name):
-    out = where+output_name
-    results = pd.read_csv(where+csv_results)
-    predictions = results.prediction
-    targets = results.target
-    # print(plasticc_names)
-    plot_best_val_cm(targets,predictions,save=True, output_file=out,names=plasticc_names,normalized=False)
-
- 
 
 plasticc_type_dict = {
     '90':'SN-Ia',
@@ -89,10 +20,10 @@ plasticc_type_dict = {
     '52':'SN-Iax',  
     '42':'SN-II', 
     '62':'SN-Ib/c',
-    '95':'SLSN',
-    '15':'TDE',
-    '64':'KN',
-    '88':'AGN'
+    '95':'SLSN'
+    # '15':'TDE',
+    # '64':'KN',
+    # '88':'AGN'
     # '92':'RRL',
     # '65':'M-dwarf',
     # '16':'EB',
@@ -104,45 +35,130 @@ plasticc_type_dict = {
     # '993':'CART',
     # '994': 'PISN'
 }
-plasticc_types = [90,67,52,42,62,95,15,64,88]
+plasticc_types = [90,67,52,42,62,95]
+# 15,64,88]
 #,92,65,16,53,6,99]
 plasticc_names = [plasticc_type_dict[k] for k in plasticc_type_dict]
 
-def probs_to_plasticc_format(csv_probs):
-    mapper = lambda x: x if x=='object_id' else 'class_'+str(plasticc_types[int(x)])
-    probabilities = pd.read_csv(where+csv_probs)
-    print(probabilities.head())
-    probabilities.rename(mapper,axis=1,inplace=True)
-    print(probabilities.head())
-    new_order_keys = ["object_id","class_6","class_15","class_16","class_42","class_52","class_53","class_62","class_64","class_65","class_67","class_88","class_90","class_92","class_95","class_99"]
-    probabilities = probabilities[new_order_keys]
-    print(probabilities.head())
-    probabilities.to_csv(where+'all_test_probabilities_plasticc_tame.csv',index=False)
+def merge_test_results_files_cv(folds=5):
+    for fold in range(folds):
+        print("Merging test files in fold {}".format(fold+1))
+        where_in_fold = results_dir+exp_name+'/folds/fold_k{}/result_outputs/'.format(fold+1)
+        merge_test_result_files(where_in_fold)
 
-def how_many():
-    # train_file = data_dir_train+"dmdts_training_24x24_b00_new8k.h5"
-    # train_data = LCs(24,train_file,n_channels=6)
-    # train_data.load_data_into_memory()
-    # labels = train_data.Y
-    # print(len(train_data))
-    # print(set(labels.cpu().numpy()))
-    train_metadata_fn = data_dir_csv+"plasticc_new8k_train_metadata.csv"
-    train_metadata = pd.read_csv(train_metadata_fn)
-    print(train_metadata.groupby('true_target').count())
+def overall_test_summary_cv(folds=5):
+    for fold in range(folds):
+        where_in_fold = results_dir+exp_name+'/folds/fold_k{}/result_outputs/'.format(fold+1)
+        overall_test_summary(where_in_fold)
 
-def compare_cms(exp_names,names,classes,output_name):
-    # files = [results_dir+exp_name+'/seed_1772670/result_outputs/test_1_results.csv' for exp_name in exp_names]
-    files = [results_dir+exp_name+'/result_outputs/test_0.25_2_results.csv' for exp_name in exp_names]
-    out = results_dir+output_name
-    plot_cms(files,2,2, subtitles=names,classes=classes, 
-        save=True,
-        output_file=out)
+def overall_cm_cv(folds=5):
+    for fold in range(folds):
+        where_in_fold = results_dir+exp_name+'/folds/fold_k{}/result_outputs/'.format(fold+1)
+        overall_cm(where_in_fold)
+
+def merge_test_result_files(where):
+    predictions = []
+    probabilities = []
+    for i in range(3,12):
+        predictions_fn = where+'test_batch{}_results.csv'.format(i)
+        pred = pd.read_csv(predictions_fn)
+        predictions.append(pred)
+        
+        probabilities_fn = where+'test_batch{}_probabilities.csv'.format(i)
+        prob = pd.read_csv(probabilities_fn)
+        probabilities.append(prob)
+        
+    all_predictions = pd.concat(predictions, axis=0, ignore_index=True)
+    all_predictions.to_csv(where+"test_results.csv",sep=',',index=False)
+
+    all_probabilities = pd.concat(probabilities, axis=0, ignore_index=True)
+    all_probabilities.to_csv(where+"test_probabilities.csv",sep=',',index=False)
+
+def average_test_summaries(where):
+    metrics = {}
+    test_batches =range(3,12)
+    for i in test_batches:
+        test_summary = pd.read_csv(where+'test_batch{}_summary.csv'.format(i))
+        if i == test_batches[0]:
+            metrics = {k: [] for k in test_summary.keys()}
+        for metric in test_summary.keys():
+            metrics[metric].append(test_summary[metric].values[0])
+
+    mean_metrics = {k: np.mean(v) for k, v in metrics.items()}
+    print(mean_metrics)
+    pd.DataFrame(mean_metrics,index=[0]).to_csv(where+"test_summary.csv",index=False)
+
+def vote_on_test_results_cv(folds = 5, predictions_fn="test_results.csv"):
+    predictions = None
+    winner_predictions = []
+    for fold in range(folds):
+        print("Fold {}".format(fold+1))
+        where_in_fold = results_dir+exp_name+'/folds/fold_k{}/result_outputs/'.format(fold+1)
+        fold_predictions = pd.read_csv(where_in_fold+predictions_fn)
+        if predictions is None: 
+            predictions = np.zeros((fold_predictions.shape[0],6))
+        for idx,row in fold_predictions.iterrows():
+            prediction_idx = row.prediction
+            predictions[idx,prediction_idx]+=1
+
+    winner = np.argmax(predictions,axis=1)
+    fold_predictions.loc[:,'prediction']=winner
+    fold_predictions.to_csv(results_dir+exp_name+'/result_outputs/majority_test_results.csv')
+
+def overall_test_summary(where,csv_results="test_results.csv",csv_probabilities="test_probabilities.csv",output="test_summary.csv"):
+    results = pd.read_csv(where+csv_results)
+    predictions = results.prediction
+    probabilities = pd.read_csv(where+csv_probabilities).iloc[:,1:]
+
+    targets = results.target
+    f1_macro = f1_score(targets, predictions, average='macro')
+    f1_weighted = f1_score(targets, predictions, average='weighted')
+    accuracy = accuracy_score(targets, predictions)
+    print("accuracy : "+str(accuracy)) #no 99 0.572
+    print("f1_macro : "+str(f1_macro)) #no 99 0.572
+
+    precision_macro = precision_score(targets, predictions,average='macro')
+    precision_weighted = precision_score(targets, predictions,average='weighted')
+    recall_macro = recall_score(targets, predictions,average='macro')
+    recall_weighted = recall_score(targets, predictions,average='weighted')
+
+    weight_code = [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+    # weight_code = [1,1,1,1,1,1,2,2,1,1,1,1,1,1,2,2,2,2]
+    weights = [weight_code[i] for i in targets.values] 
+    loss = log_loss(targets,probabilities,sample_weight=weights)
+    print("loss : "+str(loss))
+
+    metrics = pd.DataFrame({'accuracy': accuracy, 'loss':loss,
+        "f1":f1_macro, "f1_weighted":f1_weighted, 
+        "precision":precision_macro, "precision_weighted":precision_weighted, 
+        "recall": recall_macro, "recall_weighted":recall_weighted}
+        ,index=[0])
+    metrics.to_csv(where+output,index=False)
+
+def overall_cm(where,csv_results="test_results.csv",output_name="test_cm.png"):
+    out = where+output_name
+    results = pd.read_csv(where+csv_results)
+    predictions = results.prediction
+    targets = results.target
+    cm = plot_best_val_cm(targets,predictions,save=True, output_file=out,names=plasticc_names,normalized=True)
+    return cm
+# def compare_cms(exp_names,names,classes,output_name):
+#     # files = [results_dir+exp_name+'/seed_1772670/result_outputs/test_1_results.csv' for exp_name in exp_names]
+#     files = [results_dir+exp_name+'/result_outputs/test_0.25_2_results.csv' for exp_name in exp_names]
+#     out = results_dir+output_name
+#     plot_cms(files,2,2, subtitles=names,classes=classes, 
+#         save=True,
+#         output_file=out)
 
 
+average_test_summaries(results_dir+'plasticc_test_resnet_sn/result_outputs/')
+# overall_test_summary(where,csv_results="majority_test_results.csv",)
+# merge_test_results_files_cv()
+# overall_test_summary_cv()
+# overall_cm_cv()
+# vote_on_test_results_cv()
+# overall_cm(where,csv_results="majority_test_results.csv")
 
-# merge_files()
-# overall_summary('all_test_results.csv','all_test_probabilities.csv')
-overall_cm('all_test_results.csv','all_cm_real.png')
 
 # names = ["FCN","FCN", "ResNet","ResNet", "RNN","RNN", "RNN-SA","RNN-SA"]
 # names = ["FCN", "ResNet", "RNN", "RNN-SA"]

@@ -15,7 +15,7 @@ from recurrent_models import GRU1D
 
 results_dir = "../../results/"
 data_dir = "../../data/plasticc/interpolated/"
-exp_name = results_dir+"plasticc_test_grusa_eg"
+exp_name = results_dir+"plasticc_balanced_grusa_sn"
 
 
 lc_length = 128
@@ -25,23 +25,27 @@ use_gpu = True
 lr = 1e-04
 wdc = 1e-02
 seeds = [1772670]
-# seed=torch.cuda.manual_seed(seed=1772670)
+seed=torch.cuda.manual_seed(seed=1772670)
 n_seeds = 1
-num_classes = 9 
+num_classes = 6
 
 ####Vanilla Plasticc
-training_data_file=data_dir+'test/plasticc_test_data_batch2_extragalactic.h5'
-# training_data_file=data_dir+'training/plasticc_train_data_augmented_extragalactic.h5'
+training_data_file=data_dir+'training/plasticc_train_data_balanced_extragalactic.h5'
+start = time.time()
+
 train_dataset = LCs(lc_length, training_data_file, n_classes=num_classes)
 train_dataset.load_data_into_memory()
-# train_dataset.apply_tranforms()
-input_shape = train_dataset[0][0].shape
+train_dataset.filter_classes(classes_to_keep=num_classes)
+# print(len(train_dataset))
+print(time.time()-start)
+# # train_dataset.apply_tranforms()
+input_shape = torch.Size([12, 128])
 
 #for rnns
 train_dataset.packed=True
 train_dataset.lens=torch.full((len(train_dataset),),lc_length)
-
-print(len(train_dataset))
+# # 
+# # print(len(train_dataset))
 
 
 nn_params = {
@@ -61,7 +65,7 @@ exp_params={
     "use_gpu" : use_gpu,
     "batch_size" : batch_size,
     "num_output_classes": num_classes,
-    "patience":5,
+    "patience":3,
     "validation_step":3
 }
 
@@ -76,21 +80,19 @@ experiment.run_experiment()
 
 
 for i in range(3,12):
-    test_data_file = data_dir+'test/plasticc_test_data_batch{}_extragalactic.h5'.format(i)
-    test_dataset = LCs(lc_length, test_data_file)
+    test_data_file = data_dir+'test/plasticc_test_data_batch{}_balanced_extragalactic.h5'.format(i)
+    test_dataset = LCs(lc_length, test_data_file,n_classes=num_classes)
     print("loading dataset")
-    test_dataset.load_data_into_memory()
+    test_dataset.filter_classes()
 #     test_dataset.apply_tranforms()
-#for rnns
+# for rnns
     test_dataset.packed = True
     test_dataset.lens=torch.full((len(test_dataset),),lc_length)
 
     print(torch.cuda.mem_get_info(device=None))
     experiment.test_data = test_dataset
-    experiment.run_test_phase(test_data_name='test_batch{}'.format(i))
+    experiment.run_test_phase(save_name='_batch{}'.format(i))
     del test_dataset
     del experiment.test_data
     torch.cuda.empty_cache()
     print(torch.cuda.mem_get_info(device=None))
-
-  
