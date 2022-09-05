@@ -193,7 +193,6 @@ class Experiment(nn.Module):
                 elapsed_time = time.time() - start_time 
                 pbar.set_description("Test loss: {:.3f}        , ET {:.2f}s".format(running_loss/(i+1),elapsed_time))
 
-
         preds, targets = results_cm[:,1],results_cm[:,2]
         precision, recall = precision_recall(preds, targets, num_classes=self.num_output_classes, average='macro')
         loss = running_loss/len(data)

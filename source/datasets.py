@@ -80,6 +80,10 @@ class LCs(Dataset):
                 self.ids = torch.tensor(ids, device = self.device, dtype=torch.long)
                 self.Y = torch.tensor(Y, device = self.device, dtype=torch.long)
                 self.length = len(self.Y)
+                print(self.X.shape)
+                print(self.Y.shape)
+                print(self.ids.shape)
+                print(len(set(self.targets)))
         except Exception as e:
             print(e)
 

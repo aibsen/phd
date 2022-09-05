@@ -8,7 +8,7 @@ from datasets import LCs
 
 results_dir = "../../results/"
 # exp_name = 'plasticc_cropped_gru/seed_1772670'
-exp_name = 'plasticc_test_resnet_sn/seed_1772670'
+exp_name = 'plasticc_balanced_cropped_fcn_eg_3_p5/seed_1772670'
 where = results_dir+exp_name+'/result_outputs/'
 data_dir_train = "/home/ai/phd/data/plasticc/dmdt/training/"
 data_dir_csv = "/home/ai/phd/data/plasticc/csvs/"
@@ -20,10 +20,10 @@ plasticc_type_dict = {
     '52':'SN-Iax',  
     '42':'SN-II', 
     '62':'SN-Ib/c',
-    '95':'SLSN'
-    # '15':'TDE',
-    # '64':'KN',
-    # '88':'AGN'
+    '95':'SLSN',
+    '15':'TDE',
+    '64':'KN',
+    '88':'AGN'
     # '92':'RRL',
     # '65':'M-dwarf',
     # '16':'EB',
@@ -35,8 +35,7 @@ plasticc_type_dict = {
     # '993':'CART',
     # '994': 'PISN'
 }
-plasticc_types = [90,67,52,42,62,95]
-# 15,64,88]
+plasticc_types = [90,67,52,42,62,95,15,64,88]
 #,92,65,16,53,6,99]
 plasticc_names = [plasticc_type_dict[k] for k in plasticc_type_dict]
 
@@ -140,7 +139,7 @@ def overall_cm(where,csv_results="test_results.csv",output_name="test_cm.png"):
     results = pd.read_csv(where+csv_results)
     predictions = results.prediction
     targets = results.target
-    cm = plot_best_val_cm(targets,predictions,save=True, output_file=out,names=plasticc_names,normalized=True)
+    cm = plot_cm(targets,predictions,save=True, output_file=out,names=plasticc_names,normalized=True)
     return cm
 # def compare_cms(exp_names,names,classes,output_name):
 #     # files = [results_dir+exp_name+'/seed_1772670/result_outputs/test_1_results.csv' for exp_name in exp_names]
@@ -151,11 +150,11 @@ def overall_cm(where,csv_results="test_results.csv",output_name="test_cm.png"):
 #         output_file=out)
 
 
-average_test_summaries(results_dir+'plasticc_test_resnet_sn/result_outputs/')
+# average_test_summaries(results_dir+'plasticc_test_resnet_sn/result_outputs/')
 # overall_test_summary(where,csv_results="majority_test_results.csv",)
-# merge_test_results_files_cv()
-# overall_test_summary_cv()
-# overall_cm_cv()
+merge_test_results_files_cv()
+overall_test_summary_cv()
+overall_cm_cv()
 # vote_on_test_results_cv()
 # overall_cm(where,csv_results="majority_test_results.csv")
 

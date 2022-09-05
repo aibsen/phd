@@ -94,6 +94,7 @@ class CVExperiment(nn.Module):
     def run_test_phase(self, save_name='test'):
 
         folds = self.k
+        test_loader = torch.utils.data.DataLoader(self.test_data, batch_size=self.exp_params["batch_size"])
 
         for k in range(folds):
             exp_name = self.experiment_folds+"/fold_k"+str(k+1)
@@ -104,8 +105,6 @@ class CVExperiment(nn.Module):
                 batch_size = self.exp_params["batch_size"],
                 num_output_classes= self.exp_params["num_output_classes"],
             )
-
-            test_loader = torch.utils.data.DataLoader(self.test_data, batch_size=self.exp_params["batch_size"], shuffle=True)
             # start_time = time.time()
             experiment.run_test_phase(data=test_loader,save_name=save_name)
 

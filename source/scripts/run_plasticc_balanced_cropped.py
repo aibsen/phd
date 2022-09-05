@@ -11,6 +11,7 @@ import os, sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from datasets import  LCs
 from experiment import Experiment
+from seeded_experiment import SeededExperiment
 from transforms import CropPadTensor, GroupClass, GroupClassTensor, MultiCropPadTensor
 from convolutional_models import FCNN1D, ResNet1D
 from recurrent_models import GRU1D
@@ -29,36 +30,26 @@ wdc = 1e-02
 seeds = [1772670]
 seed=torch.cuda.manual_seed(seed=1772670)
 n_seeds = 1
-file_codes = [0,1,2]
-num_output_classes = 9
+num_classes = 9
 patience = 5
 
+exp_params={
+    "num_epochs" : num_epochs,
+    "learning_rate" : lr,
+    "weight_decay_coefficient" : wdc,
+    "use_gpu" : use_gpu,
+    "batch_size" : batch_size,
+    "num_output_classes": num_classes,
+    "patience":3,
+    "validation_step":3
+}
 
 ####Vanilla Plasticc
-transform1 = CropPadTensor(lc_length, cropping=0.5)
-# transform1 = MultiCropPadTensor(lc_length,fractions=[0.25,0.25],croppings=[0.5,0.25])
-# train_dataset = LCs(lc_length, training_data_file, transforms=[transform0,transform1])
+transform1 = CropPadTensor(lc_length, cropping=0.25)
 
-for file_code in file_codes:
-
-    # training_data_file=data_dir+'training/train_data_interpolated{}.h5'.format(file_code)
-    # train_dataset = LCs(lc_length, training_data_file, transforms=[transform1])
-    # train_dataset.load_data_into_memory()
-    # input_shape = train_dataset[0][0].shape
-    # train_dataset.apply_tranforms()
-    # # train_dataset.packed = True
-    # # train_dataset.lens=torch.full((len(train_dataset),),lc_length)
-
-
-    # val_data_file=data_dir+'training/val_data_interpolated{}.h5'.format(file_code)
-    # val_dataset = LCs(lc_length, val_data_file, transforms=[transform1])
-    # val_dataset.load_data_into_memory()
-    # val_dataset.apply_tranforms()
-    # # val_dataset.packed = True
-    # # val_dataset.lens=torch.full((len(val_dataset),),lc_length)
-
-    test_data_file=data_dir+'test/test_data_interpolated{}.h5'.format(file_code)
-    test_dataset = LCs(lc_length, test_data_file,transforms=[transform1])
+for i in range(3,12):
+    test_data_file=data_dir+'test/plasticc_test_data_batch{}_balanced_egx.h5'.format(i)
+    test_dataset = LCs(lc_length, test_data_file,n_classes=num_classes, transforms=[transform1])
     test_dataset.load_data_into_memory()
     input_shape = test_dataset[0][0].shape
     test_dataset.apply_tranforms()
@@ -69,56 +60,49 @@ for file_code in file_codes:
 
         nn_params = {
             "input_shape" : input_shape,
-            "num_output_classes":num_output_classes,
+            "num_output_classes":num_classes,
             "hidden_size" : 100
             # "attention" : True    
         }
         
         if arch>1:
-            exp_name = results_dir+"plasticc_balanced_0_gru"
+            exp_name = results_dir+"plasticc_balanced_gru_eg"
             # train_dataset.packed = True
             # val_dataset.packed = True
             test_dataset.packed = True
             # test_dataset.lens=torch.full((len(test_dataset),),int(lc_length*0.5))
 
             if arch == 3:
-                exp_name = exp_name+"sa"
+                exp_name = results_dir+"plasticc_balanced_grusa_eg"
                 nn_params["attention"] = True
 
             network = GRU1D(nn_params)
 
         elif arch == 0:
-            exp_name = results_dir+"plasticc_balanced_0_fcn"
+            exp_name = results_dir+"plasticc_balanced_fcn_eg"
             network = FCNN1D(nn_params)
         elif arch == 1:
-            exp_name = results_dir+"plasticc_balanced_0_resnet"
+            exp_name = results_dir+"plasticc_balanced_resnet_eg"
             network = ResNet1D(nn_params)
 
         print(input_shape)
         print(torch.cuda.mem_get_info(device=None))
+        exp_params["network_model"] =network
         
-        experiment = Experiment( 
-            network,
+        experiment = SeededExperiment(
             exp_name,
-            num_epochs=num_epochs,
-            num_output_classes = num_output_classes,
-            learning_rate = lr,
-            # train_data = train_dataset,
-            # val_data = val_dataset,
-            test_data = test_dataset,
-            weight_decay_coefficient = wdc,
-            patience = patience
+            exp_params = exp_params,
+            seeds = [1772670],
+            test_data = test_dataset
+            # train_data=train_dataset
             )
 
-        # experiment.run_experiment(save_name='_{}'.format(file_code))
-        experiment.run_test_phase(model_name='final_model_{}.pth.tar'.format(file_code),save_name='_0.5_3{}'.format(file_code))
+        experiment.run_test_phase(save_name='_batch{}_0.25'.format(i))
+        del experiment.test_data
+        del experiment
+        torch.cuda.empty_cache()
+        print(torch.cuda.mem_get_info(device=None))
 
-    # del train_dataset
-    # del val_dataset
     del test_dataset
-    # del experiment.train_data
-    # del experiment.val_data
-    del experiment.test_data
-    del experiment
     torch.cuda.empty_cache()
     print(torch.cuda.mem_get_info(device=None))

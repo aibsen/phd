@@ -1,4 +1,5 @@
 
+from turtle import color
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -276,7 +277,7 @@ def draw_cm(ax,target, prediction, normalized=True, colormap=None, names=plastic
     if colormap is not None:
         im = ax.imshow(cm, interpolation= 'nearest', cmap=colormap)
     else : 
-        im = ax.imshow(cm, interpolation= 'nearest', cmap=plt.cm.BuPu)
+        im = ax.imshow(cm, interpolation= 'nearest', cmap=plt.cm.Oranges)
     fmt ='.2f'
     thresh = cm.max() / 2.
     for i in range(cm.shape[0]):
@@ -301,7 +302,7 @@ def plot_cm(target, prediction, normalized=True, colormap=None, names=plasticc_n
     verbose=False, save=False, output_file=None):
 
     fig,ax = plt.subplots(1,1)
-    draw_cm(ax,target,prediction,normalized=normalized)
+    draw_cm(ax,target,prediction,normalized=normalized,names=names,colormap=colormap)
     ax.set_xlabel("Predicted class")
     ax.set_ylabel("True class")
     # print(names)
