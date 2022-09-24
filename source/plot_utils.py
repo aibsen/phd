@@ -224,6 +224,7 @@ def plot_cms(files, rows, cols,color=None,
     output_file = None):
     
     fig, axs = plt.subplots(rows, cols)
+    # ,sharex=True,sharey=True)
     tags_predictions = []
     
     for f in files:
@@ -249,9 +250,19 @@ def plot_cms(files, rows, cols,color=None,
     for i,ax in enumerate(fig.get_axes()):
         # ax.label_outer()
         ax.title.set_text(subtitles[i])
+    
+    # for i,ax in enumerate(fig.get_axes()[0:3]):
+    #     # ax.label_outer()
+    #     ax.set_title(subtitles[i],size=20)
 
-    fig.supxlabel('Predicted class')
-    fig.supylabel('True class')
+    # nns =["Self-Attention", "GRU","FCN", "ResNet"]
+    # for i,ax in enumerate(fig.get_axes()):
+    #     if i%3==0:
+    #         ax.set_ylabel(nns[int(i/3)],size=20)
+
+
+    fig.supxlabel('Predicted class',size=14)
+    fig.supylabel('True class',size=14)
     # fig.suptitle(title)
 
     if save and output_file:
@@ -259,7 +270,7 @@ def plot_cms(files, rows, cols,color=None,
         fig.set_figheight(7*rows)
         # fig.set_figwidth(9*cols)
         fig.set_figwidth(7*cols)
-        fig.set_dpi(100)
+        # fig.set_dpi(100)
         plt.tight_layout()
         plt.savefig(output_file)
     elif save:
@@ -285,15 +296,15 @@ def draw_cm(ax,target, prediction, normalized=True, colormap=None, names=plastic
             if normalized:
                 ax.text(j, i, format(cm[i, j], fmt),
                     ha="center", va="center",
-                    color="white" if cm[i, j] > thresh else "black")
+                    color="white" if cm[i, j] > thresh else "black",size=14)
             else :
                 ax.text(j, i, format(cm[i, j]),
                     ha="center", va="center",
                     color="white" if cm[i, j] > thresh else "black")
     ax.set_xticks(range(0,len(names)))
     ax.set_yticks(range(0,len(names)))
-    ax.set_xticklabels(names)
-    ax.set_yticklabels(names)
+    ax.set_xticklabels(names,size=14)
+    ax.set_yticklabels(names,size=14)
 
     plt.setp(ax.get_xticklabels(), rotation=45, ha="right",
          rotation_mode="anchor")

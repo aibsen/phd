@@ -23,7 +23,7 @@ plasticc_type_dict = {
     '95':'SLSN',
     '15':'TDE',
     '64':'KN',
-    '88':'AGN'
+    '88':'AGN',
     # '92':'RRL',
     # '65':'M-dwarf',
     # '16':'EB',
@@ -141,27 +141,53 @@ def overall_cm(where,csv_results="test_results.csv",output_name="test_cm.png"):
     targets = results.target
     cm = plot_cm(targets,predictions,save=True, output_file=out,names=plasticc_names,normalized=True)
     return cm
-# def compare_cms(exp_names,names,classes,output_name):
-#     # files = [results_dir+exp_name+'/seed_1772670/result_outputs/test_1_results.csv' for exp_name in exp_names]
-#     files = [results_dir+exp_name+'/result_outputs/test_0.25_2_results.csv' for exp_name in exp_names]
-#     out = results_dir+output_name
-#     plot_cms(files,2,2, subtitles=names,classes=classes, 
-#         save=True,
-#         output_file=out)
+def compare_cms(exp_names,names,classes,output_name):
+    files = [results_dir+exp_name+'/seed_1772670/result_outputs/all_test_results.csv' for exp_name in exp_names]
+    # files = [results_dir+exp_name+'/result_outputs/test_0.25_2_results.csv' for exp_name in exp_names]
+    out = results_dir+output_name
+    plot_cms(files,2,2, subtitles=names,classes=classes, 
+        save=True,
+        output_file=out)
 
+def compare_cms_folds(exp_names,names,classes,output_name):
+    files = [results_dir+exp_name+'/seed_1772670/folds/fold_k{}/result_outputs/test_results_0.25.csv'.format(i) for exp_name,i in exp_names]
+    out = results_dir+output_name
+    plot_cms(files,2,2, subtitles=names,classes=classes, 
+        save=True,
+        output_file=out)
 
+# exp_names = [('plasticc_balanced_fcn_eg',2),('plasticc_balanced_resnet_eg',1),('plasticc_balanced_gru_eg_0',1),('plasticc_balanced_grusa_eg_0',5)]
+# names = ["FCN", "ResNet", "RNN", "RNN-SA"]
+# compare_cms_folds(exp_names,names, plasticc_names,'plasticc_balanced_2.png')
+
+# exp_names = [('plasticc_balanced_fcn_eg',2),('plasticc_balanced_resnet_eg',1),('plasticc_balanced_gru_eg',1),('plasticc_balanced_grusa_eg',4)]
+# names = ["FCN", "ResNet", "RNN", "RNN-SA"]
+# compare_cms_folds(exp_names,names, plasticc_names,'plasticc_balanced_0.5_2.png')
+
+exp_names = [('plasticc_balanced_fcn_eg',4),('plasticc_balanced_resnet_eg',1),('plasticc_balanced_gru_eg',1),('plasticc_balanced_grusa_eg',4)]
+# names = ["FCN", "ResNet", "RNN", "RNN-SA"]
+# compare_cms_folds(exp_names,names, plasticc_names,'plasticc_balanced_0.25_2.png')
+
+# 5,1,10,50
 # average_test_summaries(results_dir+'plasticc_test_resnet_sn/result_outputs/')
 # overall_test_summary(where,csv_results="majority_test_results.csv",)
-merge_test_results_files_cv()
-overall_test_summary_cv()
-overall_cm_cv()
+# for model in ['fcn','resnet','gru', 'grusa']:
+    # merge_test_result_files(results_dir+'plasticc_balanced_{}_eg/result_outputs/'.format(model))
+# overall_test_summary_cv()
+# overall_cm_cv()
 # vote_on_test_results_cv()
 # overall_cm(where,csv_results="majority_test_results.csv")
 
 
-# names = ["FCN","FCN", "ResNet","ResNet", "RNN","RNN", "RNN-SA","RNN-SA"]
+# # names = ["FCN","FCN", "ResNet","ResNet", "RNN","RNN", "RNN-SA","RNN-SA"]
 # names = ["FCN", "ResNet", "RNN", "RNN-SA"]
-# exp_names = ["plasticc_{}".format(model) for model in ["vanilla_fcn_eg","test_fcn_eg","vanilla_resnet_eg","test_resnet_eg","vanilla_gru_eg","test_gru_eg","vanilla_grusa_eg","test_grusa_eg"]]
-# exp_names = ["plasticc_balanced_cropped_{}".format(model) for model in ["fcn","resnet","gru","grusa"]]
-# compare_cms(exp_names,names,plasticc_names,"plasticc_balanced_cropped_0.25_2.png")
+# exp_names = ["plasticc_{}".format(model) for model in ["test_fcn_eg","test_resnet_eg","test_gru_eg","test_grusa_eg"]]
+# # "test_fcn_eg","vanilla_resnet_eg","test_resnet_eg","vanilla_gru_eg","test_gru_eg","vanilla_grusa_eg","test_grusa_eg"]]
+# # exp_names = ["plasticc_balanced_cropped_{}".format(model) for model in ["fcn","resnet","gru","grusa"]]
+# compare_cms(exp_names,names,plasticc_names,"plasticc_test_eg_2.png")
 
+names = ["FCN", "ResNet", "RNN", "RNN-SA"]
+exp_names = ["plasticc_{}".format(model) for model in ["vanilla_fcn_eg","vanilla_resnet_eg","vanilla_gru_eg","vanilla_grusa_eg"]]
+# "test_fcn_eg","vanilla_resnet_eg","test_resnet_eg","vanilla_gru_eg","test_gru_eg","vanilla_grusa_eg","test_grusa_eg"]]
+# exp_names = ["plasticc_balanced_cropped_{}".format(model) for model in ["fcn","resnet","gru","grusa"]]
+compare_cms(exp_names,names,plasticc_names,"plasticc_vanilla_eg_2.png")

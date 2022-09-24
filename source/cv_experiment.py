@@ -7,7 +7,7 @@ import torch.nn.functional as F
 import torch.backends.cudnn as cudnn
 import os
 import numpy as np
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedKFold, ShuffleSplit
 from experiment import Experiment
 from plot_utils import *
 
@@ -38,8 +38,10 @@ class CVExperiment(nn.Module):
             self.train_length = len(train_data)
             idxs = np.arange(self.train_length)
             targets = train_data.targets
-            kf = StratifiedKFold(n_splits=k)
-            self.kfs = kf.split(idxs,targets)
+            kf = ShuffleSplit(n_splits=k)
+            # kf = StratifiedKFold(n_splits=k)
+            self.kfs = kf.split(idxs)
+            # self.kfs = kf.split(idxs,targets)
 
     def save_fold_statistics(self, summary_file, metric='f1'):
         stats = {'epoch':[],'accuracy':[],'loss':[],'f1':[],'precision':[],'recall':[]}
@@ -57,7 +59,7 @@ class CVExperiment(nn.Module):
             self.mean_best_epoch = int(stats_df.iloc[0]['mean_epoch'])
         stats_df.to_csv(self.experiment_logs+"/"+summary_file,index=False)
 
-    def run_experiment(self, test_data_name="test"):
+    def run_experiment(self, test_data_name=""):
         if self.train_data:
             self.run_train_phase()
         if self.test_data:
@@ -91,7 +93,7 @@ class CVExperiment(nn.Module):
         self.save_fold_statistics("validation_summary.csv")
         self.save_fold_statistics("training_summary.csv") #there's an error here that I don't have time to fix: I'm saving best training stats, but kept last training epoch results.
 
-    def run_test_phase(self, save_name='test'):
+    def run_test_phase(self, save_name=''):
 
         folds = self.k
         test_loader = torch.utils.data.DataLoader(self.test_data, batch_size=self.exp_params["batch_size"])

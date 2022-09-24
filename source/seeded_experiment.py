@@ -88,7 +88,7 @@ class SeededExperiment(nn.Module):
         if self.verbose:
             print("--- %s seconds ---" % (time.time() - start_time))
 
-    def run_test_phase(self, save_name = 'test'):
+    def run_test_phase(self, save_name = ''):
         if len(self.cv_experiments) > 0:
             for i, seed in enumerate(self.seeds):
                 torch.manual_seed(seed=seed)

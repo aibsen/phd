@@ -50,7 +50,7 @@ class GRU1D(nn.Module):
 
         self.r = 1 
         
-        if 'attention' in self.params.keys():
+        if 'attention' in self.params.keys() and self.params['attention']:
             self.r = 1 if 'r' not in self.params.keys() else self.params['r'] 
             self.layer_dict['attn'] = AdditiveAttention1D(self.params, r=self.r)
 
@@ -76,10 +76,13 @@ class GRU1D(nn.Module):
             # print(out.shape)
             out = self.dropout(out)
         else:
-            out = self.dropout(out)
             # print(out.shape)
-            out = out[:,-1,:]
+            idx = lens.max()
+            # print(idx)
+            out = out[:,idx-1,:]
+            out = self.dropout(out)
 
+        # print(out.shape)
         out = self.layer_dict['linear'](out)
         # print(out.shape)
         return out

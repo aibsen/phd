@@ -1,4 +1,5 @@
 
+from re import L
 import pandas as pd
 import numpy as np
 import h5py
@@ -49,109 +50,55 @@ def df_tags(df_sn, t):
     df_sn_tags.loc[:,"type"] = t
     return df_sn_tags
 
-def create_interpolated_vectors(data, tags, length, n_channels=2):
-    obj_ids = tags.id.unique()
+
+def create_interpolated_vectors(data, length, n_channels=6):
+
     data_cp = data.copy()
-    # if dtype == 'sim':
-    # data_cp['ob_p']=data.id*10+data.band
-    # elif dtype == 'real':
-    data_cp['ob_p']=data.id+data.band.apply(lambda band: str(band))
+    data_cp['ob_p']= data.object_id*10+data.passband
+    # print(data_cp)
 
-    #sanity check
-    # print("there are",data_cp.id.unique().size, "objects")
-    # print("there are",data_cp.ob_p.unique().size, "lightcurves")
-    # print("is the n_lcs twice n_objs?",data_cp.id.unique().size*2==data_cp.ob_p.unique().size)
-
-    #get dataframe with min and max mjd values per each object id
-    group_by_mjd = data_cp.groupby(['id'])['time'].agg(['min', 'max']).rename(columns = lambda x : 'time_' + x).reset_index()
-    merged = pd.merge(data_cp, group_by_mjd, how = 'left', on = 'id')
-
-    #sanity check
-    # print("do I still have the same nobjs",merged.id.unique().size == data_cp.id.unique().size)
-
-    #scale mjd according to max mjd, min mjd and the desired length of the light curve (128)
-    merged['scaled_time'] = (length - 1) * (merged['time'] - merged['time_min'])/(merged['time_max']-merged['time_min'])
-    merged['count'] = 1
-    merged['cc'] = merged.groupby(['ob_p'])['count'].cumcount()
-    merged=merged.sort_values(['id','time'])
-    #sanity check
-    # print("still?",merged.id.unique().size==data_cp.id.unique().size)
-
-    #reshape df so that for each row there's one lightcurve (2 rows per obj) and each column is a point of it
-    # there is two main columns also, for flux and for mjd
-    unstack = merged[['ob_p', 'scaled_time', 'flux', 'cc']].set_index(['ob_p', 'cc']).unstack()
-    # print("still when unstacking?",unstack.shape[0]== data_cp.id.unique().size*2)
-    #transform above info into numpy arrays
-    time_uns = unstack['scaled_time'].values[..., np.newaxis]
-    flux_uns = unstack['flux'].values[..., np.newaxis]
-    time_flux = np.concatenate((time_uns, flux_uns), axis =2)
-    #create a mask to get points that are valid (not nan)
-    #do this for time dim only, since fluxes will be nan when times are also
-    nan_masks = ~np.isnan(time_flux)[:, :, 0]
-    x = np.arange(length)
-    n_lcs = time_flux.shape[0]
-    #here we'll store interpolated lcs
-    X = np.zeros((n_lcs, x.shape[0]))
-    t=range(n_lcs)
-    for i in t:
-        if nan_masks[i].any(): #if any point is real
-            X[i] = np.interp(x, time_flux[i][:, 0][nan_masks[i]], time_flux[i][:, 1][nan_masks[i]])
-        else:
-            X[i] = np.zeros_like(x)
-
-    n_objs = int(n_lcs/2)
-    #reshape vectors so the ones belonging to the same object are grouped into 2 channels
-    X_per_band = X.reshape((n_objs,2,length)).astype(np.float32)
-
-    if n_channels == 4:
-    #get distance for each point to nearest real point
-        X_void = np.zeros((n_lcs, x.shape[0]))
-        t=range(length)
-        for i in t:
-            X_void[:, i] = np.abs((unstack["scaled_time"] - i)).min(axis = 1).fillna(500)
-
-        #reshape vectors so the ones belonging to the same object are grouped into 2 channels
-        X_void_per_band = X_void.reshape((n_objs,2,length)).astype(np.float32)
-        vectors = np.concatenate((X_per_band,X_void_per_band),axis=1)
-        return vectors, obj_ids, tags.type.values
-
-    elif n_channels == 2:
-        return X_per_band, obj_ids, tags.type.values
-
-def create_interpolated_vectors_plasticc(data, length, n_channels=6):
-    # obj_ids = tags.object_id.unique()
-    data_cp = data.copy()
-    data_cp['ob_p']=data.object_id*10+data.passband
-
-    #sanity check, 6 lcs per object
+    # #sanity check, n_channels lcs per object
+    print(data_cp.object_id.unique().size*n_channels)
+    print(data_cp.ob_p.unique().size)
     assert(data_cp.object_id.unique().size*n_channels==data_cp.ob_p.unique().size)
-
+    
+    
     #get dataframe with min and max mjd values per each object id
     group_by_mjd = data_cp.groupby(['object_id'])['mjd'].agg(['min', 'max']).rename(columns = lambda x : 'time_' + x).reset_index()
     merged = pd.merge(data_cp, group_by_mjd, how = 'left', on = 'object_id')
-
-    #sanity check, still same number of objects
+    # print(merged)
+    # sanity check, still same number of objects
     assert(merged.object_id.unique().size == data_cp.object_id.unique().size)
-
     #scale mjd according to max mjd, min mjd and the desired length of the light curve (128)
     merged['scaled_time'] = (length - 1) * (merged['mjd'] - merged['time_min'])/(merged['time_max']-merged['time_min'])
     merged['count'] = 1
     merged['cc'] = merged.groupby(['ob_p'])['count'].cumcount()
-    merged=merged.sort_values(['object_id','mjd'])
-    #sanity check
+    # merged=merged.sort_values(['object_id','mjd'])
+    # #sanity check
     assert(merged.object_id.unique().size==data_cp.object_id.unique().size)
+    # print(merged)
 
-    #reshape df so that for each row there's one lightcurve (6 rows per obj) and each column is a point of it
-    # there is two main columns also, for flux and for mjd
-    unstack = merged[['ob_p', 'scaled_time', 'flux', 'cc']].set_index(['ob_p', 'cc']).unstack()
-    print(merged)
-    print(unstack)
-    print(merged.object_id.unique())
+    # #reshape df so that for each row there's one lightcurve (6 rows per obj) and each column is a point of it
+    # # there is two main columns also, for flux and for mjd
+    if 'magpsf' in merged.keys():
+        unstack = merged[['object_id','ob_p', 'scaled_time', 'magpsf', 'cc']].set_index(['object_id','ob_p', 'cc']).unstack()
+        units = 'magpsf'
+    else:
+        unstack = merged[['ob_p', 'scaled_time', 'flux', 'cc']].set_index(['ob_p', 'cc']).unstack()
+        units = 'flux'
+
+    # print(merged)
+    # print(unstack)
+    # print(unstack.index)
+    # print(merged.object_id.unique())
     # sanity check
     assert(unstack.shape[0]== data_cp.object_id.unique().size*n_channels)
-    #transform above info into numpy arrays
+    # return
+
+    # #transform above info into numpy arrays
     time_uns = unstack['scaled_time'].values[..., np.newaxis]
-    flux_uns = unstack['flux'].values[..., np.newaxis]
+    # print(time_uns)
+    flux_uns = unstack[units].values[..., np.newaxis]
     time_flux = np.concatenate((time_uns, flux_uns), axis =2)
     #create a mask to get points that are valid (not nan)
     #do this for time dim only, since fluxes will be nan when times are also
@@ -166,11 +113,15 @@ def create_interpolated_vectors_plasticc(data, length, n_channels=6):
             X[i] = np.interp(x, time_flux[i][:, 0][nan_masks[i]], time_flux[i][:, 1][nan_masks[i]])
         else:
             X[i] = np.zeros_like(x)
-
+    # print(X.shape)
     n_objs = int(n_lcs/n_channels)
     #reshape vectors so the ones belonging to the same object are grouped into 6 channels
     X_per_band = X.reshape((n_objs,n_channels,length)).astype(np.float32)
+    # print(X_per_band.shape)
 
+    # print(unstack.index)
+    ids = unstack.index.to_frame(index=False).object_id.unique()
+    # print(ids)
     #get distance for each point to nearest real point
     X_void = np.zeros((n_lcs, x.shape[0]))
     t=range(length)
@@ -180,7 +131,7 @@ def create_interpolated_vectors_plasticc(data, length, n_channels=6):
     #reshape vectors so the ones belonging to the same object are grouped into 6 channels
     X_void_per_band = X_void.reshape((n_objs,n_channels,length)).astype(np.float32)
     vectors = np.concatenate((X_per_band,X_void_per_band),axis=1)
-    return vectors, merged.object_id.unique()
+    return vectors, ids
 
 
 def append_vectors(dataset,outputFile):
@@ -211,6 +162,11 @@ def save_vectors(dataset, outputFile):
     
     print("writing Y")
     hf.create_dataset('Y',data=dataset['Y'],compression="gzip", chunks=True, maxshape=(None,))
+
+    if 'lens' in dataset.keys():
+        print("writing lens")
+        hf.create_dataset('lens',data=dataset['lens'],dtype='int64',compression="gzip", chunks=True, maxshape=(None,))
+    
     hf.close()
 
 def flux_to_abmag(f,zp=30):

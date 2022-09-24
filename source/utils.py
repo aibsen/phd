@@ -7,6 +7,43 @@ import torch
 import argparse
 
 
+
+simsurvey_ztf_type_dict = {
+    '0':'Ia',
+    '1':'Ia-91bg', 
+    '2':'Iax',  
+    '3':'IIP', 
+    '4':'Ibc',
+    '5':'SLSN',
+    '6':'IIn'
+}
+
+plasticc_type_dict = {
+    '90':'SN-Ia',
+    '67':'SN-Ia-91BG', 
+    '52':'SN-Iax',  
+    '42':'SN-II', 
+    '62':'SN-Ib/c',
+    '95':'SLSN',
+    '15':'TDE',
+    '64':'KN',
+    '88':'AGN'
+    # '92':'RRL',
+    # '65':'M-dwarf',
+    # '16':'EB',
+    # '53':'Mira',
+    # '6':'uLens-Single',
+    # '99':'Class 99'
+    # # '991':'uLens-Binary',
+    # '992':'ILOT',
+    # '993':'CART',
+    # '994': 'PISN'
+}
+
+plasticc_types = [90,67,52,42,62,95,15,64,88]
+#,92,65,16,53,6,99]
+plasticc_names = [plasticc_type_dict[k] for k in plasticc_type_dict]
+
 def save_to_stats_pkl_file(experiment_log_filepath, filename, stats_dict):
     summary_filename = os.path.join(experiment_log_filepath, filename)
     with open("{}.pkl".format(summary_filename), "wb") as file_writer:
