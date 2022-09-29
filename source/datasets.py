@@ -123,7 +123,11 @@ class CachedLCs(Dataset):
         # print(idx)
         if idx <= self.high_idx and idx >=self.low_idx: #if index asked for is in cache, return it
             idx = int(idx-self.low_idx)
-            sample = self.X[idx], self.Y[idx], self.ids[idx]
+            try:
+                sample = self.X[idx], self.Y[idx], self.ids[idx]
+            except Exception as e:
+                print(e)
+                sample = self.X[idx-1], self.Y[idx-1], self.ids[idx-1]
         else: #if index asked for is not in cache, load it
             print("loading data")
             self.loading_data=self.loading_data+1

@@ -50,7 +50,7 @@ class CVExperiment(nn.Module):
             targets = train_data.targets
             kf = StratifiedKFold(n_splits=k)
             self.kfs = kf.split(idxs,targets)
-
+# 
     def save_fold_statistics(self, summary_file, metric='f1'):
         stats = {'epoch':[],'accuracy':[],'loss':[],'f1':[],'precision':[],'recall':[]}
         for k in np.arange(self.k):
@@ -207,27 +207,3 @@ class CVExperiment(nn.Module):
         save_path = save_dir+"/"+plot_name
         predictions, targets = self.get_fold_results(fold)
         plot_best_val_cm(targets,predictions, save=True,verbose=False, output_file=save_path)
-
-    # def get_folds_from_folders(self):
-    #     rootdir = self.experiment_folds
-    #     folds = os.walk(rootdir).__next__()[1]
-    #     return folds
-
-
-    # def get_best_fold(self,summary_filename="test_summary.csv",metric="f1"):
-    #     folds = self.get_folds_from_folders()
-    #     best_k = -1
-    #     best_metric = -1
-    #     for fold in folds:
-    #         summary = self.experiment_folds+"/"+fold+"/result_outputs/"+summary_filename
-    #         summary_df=pd.read_csv(summary)
-    #         new_metric = summary_df[metric].values
-    #         # print(summary_df)
-    #         # print(new_metric)
-    #         if new_metric>best_metric: #this would only work for acc and f1
-    #             best_metric = new_metric
-    #             best_k = fold[-1] #only works for 9 or less folds
-        
-    #     return best_k, best_metric
-
-    
