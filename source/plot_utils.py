@@ -1,4 +1,5 @@
 
+from turtle import color
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -214,48 +215,80 @@ def plot_sns_by_date(metadata_file,color=None):
     autolabel(ax,rects)
     plt.show()
 
-def plot_cms(files, rows, cols,color=None):
+def plot_cms(files, rows, cols,color=None, 
+    subtitles = ["FCN", "ResNet", "RNN", "RNN with self-attention"],
+    classes = ["snIa","snIb/c","snIIn","snIIP"],
+    title = '',
+    verbose = True,
+    save = False,
+    output_file = None):
+    
     fig, axs = plt.subplots(rows, cols)
+    # ,sharex=True,sharey=True)
     tags_predictions = []
     
     for f in files:
         test_results = pd.read_csv(f)
         print(f)
         print(test_results.shape)
-        tt = test_results.true_tags.values
-        pt = test_results.predicted_tags.values
+        tt = test_results.target.values
+        pt = test_results.prediction.values
         tags_predictions.append([tt,pt])
 
-
+    axs=axs.flatten()
+    print(axs)
     for i,ax in enumerate(axs):
+        print(ax)
         tt = tags_predictions[i][0]
         pt = tags_predictions[i][1]
         if color:
             colormap = make_colormap_from_color(color)
-            plot_cm(ax,tt,pt,colormap=colormap)
+            draw_cm(ax,tt,pt,colormap=colormap,names=classes)
         else:
-            plot_cm(ax,tt,pt)
-
-    titles = ["FCN", "ResNet", "RNN", "RNN with self-attention"]
+            draw_cm(ax,tt,pt,names=classes)
+    
     for i,ax in enumerate(fig.get_axes()):
-        ax.label_outer()
-        ax.title.set_text(titles[i])
+        # ax.label_outer()
+        ax.title.set_text(subtitles[i])
+    
+    # for i,ax in enumerate(fig.get_axes()[0:3]):
+    #     # ax.label_outer()
+    #     ax.set_title(subtitles[i],size=20)
 
-    plt.show()
+    # nns =["Self-Attention", "GRU","FCN", "ResNet"]
+    # for i,ax in enumerate(fig.get_axes()):
+    #     if i%3==0:
+    #         ax.set_ylabel(nns[int(i/3)],size=20)
 
-def plot_cm(ax,true_targets, predictions, normalized=True,colormap=None):
-    # fig = plt.figure()
-    # ax = fig.add_subplot(111)
-    cm=confusion_matrix(true_targets,predictions)
+
+    fig.supxlabel('Predicted class',size=14)
+    fig.supylabel('True class',size=14)
+    # fig.suptitle(title)
+
+    if save and output_file:
+        # fig.set_figheight(9*rows)
+        fig.set_figheight(7*rows)
+        # fig.set_figwidth(9*cols)
+        fig.set_figwidth(7*cols)
+        # fig.set_dpi(100)
+        plt.tight_layout()
+        plt.savefig(output_file)
+    elif save:
+        print("Need output_file argument")
+    if verbose:
+        plt.show()
+
+
+def draw_cm(ax,target, prediction, normalized=True, colormap=None, names=plasticc_names):
+    # print(names)
+    # fig,ax = plt.subplots(1,1)
+    cm=confusion_matrix(target,prediction)
     if normalized:
         cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
     if colormap is not None:
         im = ax.imshow(cm, interpolation= 'nearest', cmap=colormap)
     else : 
-        im = ax.imshow(cm, interpolation= 'nearest', cmap=plt.cm.PuBu)
-    names = ["snIa"," ","snIb/c"," ","snIIn"," ","snIIP"]
-    # namesy = ["snIa"," ","snIb/c"," ","snIIn"," ","snIIP"]
-    # namesx = ["snIa","snIb/c","snIIn","snIIP"]
+        im = ax.imshow(cm, interpolation= 'nearest', cmap=plt.cm.Oranges)
     fmt ='.2f'
     thresh = cm.max() / 2.
     for i in range(cm.shape[0]):
@@ -263,17 +296,45 @@ def plot_cm(ax,true_targets, predictions, normalized=True,colormap=None):
             if normalized:
                 ax.text(j, i, format(cm[i, j], fmt),
                     ha="center", va="center",
-                    color="white" if cm[i, j] > thresh else "black")
+                    color="white" if cm[i, j] > thresh else "black",size=14)
             else :
                 ax.text(j, i, format(cm[i, j]),
                     ha="center", va="center",
                     color="white" if cm[i, j] > thresh else "black")
-    ax.set_xticklabels([''] + names)
-    ax.set_yticklabels([''] + names)
-    ax.set_xlabel("predicted class")
-    ax.set_ylabel("true class")
+    ax.set_xticks(range(0,len(names)))
+    ax.set_yticks(range(0,len(names)))
+    ax.set_xticklabels(names,size=14)
+    ax.set_yticklabels(names,size=14)
+
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right",
+         rotation_mode="anchor")
+
+def plot_cm(target, prediction, normalized=True, colormap=None, names=plasticc_names,
+    verbose=False, save=False, output_file=None):
+
+    fig,ax = plt.subplots(1,1)
+    draw_cm(ax,target,prediction,normalized=normalized,names=names,colormap=colormap)
+    ax.set_xlabel("Predicted class")
+    ax.set_ylabel("True class")
+    # print(names)
+    fig.set_figheight(10)
+    fig.set_figwidth(10)
+    fig.set_dpi(100)
+    # fig.figsize(100,100)
+    # size = fig.get_size_inches()
+    # print(size)
+    if verbose:
+        plt.show()
+    
+    if save and output_file:
+        # print(size)
+        # print(fig.dpi)
+        plt.savefig(output_file)
+    elif save:
+        print("Need output_file argument") 
 
 def plot_best_val_cm(target, prediction, normalized=True, colormap=None, names=plasticc_names,verbose=False, save=False, output_file=None):
+    # print(names)
     fig,ax = plt.subplots(1,1)
     cm=confusion_matrix(target,prediction)
     if normalized:
@@ -319,6 +380,7 @@ def plot_best_val_cm(target, prediction, normalized=True, colormap=None, names=p
         plt.savefig(output_file)
     elif save:
         print("Need output_file argument")
+    return cm
 
 def plot_best_cms(results_dir = "../../results/",exp=2,part=1,count=3):
     
