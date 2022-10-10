@@ -1,4 +1,3 @@
-import math
 from typing import Tuple
 
 import torch
@@ -10,71 +9,96 @@ import numpy as np
 
 class TSTransformer(nn.Module):
 
-    def __init__(self, ntoken: int, d_model: int, nhead: int, d_hid: int,
-                 nlayers: int, dropout: float = 0.2):
+    def __init__(self,
+        input_features = 4,
+        d_model = 128,
+        nhead =1,
+        d_hid: int = 150,
+        nlayers: int = 1, 
+        dropout: float = 0.2):
         super().__init__()
 
         self.layer_dict = nn.ModuleDict()
-        self.layer_dict['local_encoder_0'] = PositionalEncoding(d_model, dropout)
-        encoder_layer = nn.TransformerEncoderLayer(d_model, nhead, d_hid, dropout)
+        self.layer_dict['encoder_in'] = nn.Linear(input_features, d_model,bias=False)
+        self.layer_dict['decoder_in'] = nn.Linear(input_features, d_model,bias=False)
+        self.layer_dict['local_encoder_0'] = PositionalEncoding(d_model, dropout,max_len=128)
+        encoder_layer = nn.TransformerEncoderLayer(d_model, nhead, d_hid, dropout,batch_first=True)
         self.layer_dict['encoder'] = nn.TransformerEncoder(encoder_layer, nlayers)
-        
-        self.layer_dict['local_encoder_1'] = PositionalEncoding(d_model, dropout)
-        decoder_layer = nn.TransformerDecoderLayer(d_model, nhead, d_hid, dropout)
+        self.layer_dict['local_encoder_1'] = PositionalEncoding(d_model, dropout,max_len=128)
+        decoder_layer = nn.TransformerDecoderLayer(d_model, nhead, d_hid, dropout,batch_first=True)
         self.layer_dict['decoder'] = nn.TransformerDecoder(decoder_layer,nlayers)
-        self.layer_dict['local_decoder'] = nn.Linear(d_model, ntoken)
+        self.layer_dict['local_decoder'] = nn.Linear(d_model, 6)
 
         self.init_weights()
 
     def init_weights(self) -> None:
-        for p in self.parameters():
-            if p.dim()>1:
-                try:
-                    p.reset_parameters()
-                except Exception as e:
-                    print(e)
-                    nn.init.xavier_uniform_(p)
+        for item in self.layer_dict.children():
+            try:
+                item.reset_parameters()
+            except Exception as e:
+                # print(e)
+                for p in item.parameters():
+                    if p.dim() > 1: 
+                        nn.init.xavier_uniform_(p)
 
     def reset_parameters(self) -> None:
         self.init_weights()
 
     def forward(self, src, trg) -> Tensor:
-
-        src = self.layer_dict['local_encoder_0'](src)
-        trg = self.layer_dict['local_encoder_1'](trg)
-
-        src_mask = self.make_pad_mask(src, src)
-        src_trg_mask = self.make_pad_mask(trg, src)
-        trg_mask = self.make_pad_mask(trg, trg) * \
-                   self.make_no_peak_mask(trg, trg)
-
-        memory = self.encoder(src, src_mask)
-        out = self.decoder(trg, memory, trg_mask, src_trg_mask)
-
-        out = self.layer_dict['local_decoder'](out)
         
-        return out
+        src_lens = src[1]
+        trg_lens = trg[1]
 
-    def make_pad_mask(self, q, k):
-        len_q, len_k = q.size(1), k.size(1)
-        # batch_size x 1 x 1 x len_k
-        k = k.ne(self.src_pad_idx).unsqueeze(1).unsqueeze(2)
-        # batch_size x 1 x len_q x len_k
-        k = k.repeat(1, 1, len_q, 1)
-        # batch_size x 1 x len_q x 1
-        q = q.ne(self.src_pad_idx).unsqueeze(1).unsqueeze(3)
-        # batch_size x 1 x len_q x len_k
-        q = q.repeat(1, 1, 1, len_k)
-        mask = k & q
-        return mask
+        src = src[0]
+        trg = trg[0]
+        # print(src.shape)
+        src = self.layer_dict['encoder_in'](src) 
+        # print(src.shape)
+        src = self.layer_dict['local_encoder_0'](src)
+        # print(src.shape)
 
-    def make_no_peak_mask(self, q, k):
-        len_q, len_k = q.size(1), k.size(1)
-        # len_q x len_k
-        mask = torch.tril(torch.ones(len_q, len_k)).type(torch.BoolTensor).to(self.device)
 
-    # def generate_square_subsequent_mask(sz: int) -> Tensor:
-    #     """Generates an upper-triangular matrix of -inf, with zeros on diag."""
-    #     return torch.triu(torch.ones(sz, sz) * float('-inf'), diagonal=1)
+        trg = self.layer_dict['decoder_in'](trg)
+        trg = self.layer_dict['local_encoder_1'](trg)
+    #     trg = self.layer_dict['local_encoder_1'](trg[0])
+    #     # print(src.shape)
+        
+        src_mask = self.pad_mask(src,src_lens)
+        # print(src_mask.shape)
+    #     # src_trg_mask = self.pad_mask(trg, src)
+    #     trg_mask = self.pad_mask(trg, trg_lens)
+    #     no_peak = self.no_peak_mask(trg)
+    #     # print(trg_mask)
+
+    #     # src = src.permute(0,2,1) #bs,length,features
+    #     # trg = trg.permute(0,2,1) #bs,length,features
+        memory = self.layer_dict['encoder'](src, src_key_padding_mask=src_mask)
+        # print(memory.shape)
+        out=self.layer_dict['local_decoder'](memory)
+        # print(out.shape)
+        out = out.view(out.shape[0],out.shape[1]*out.shape[2])
+        return(out)
+    #     out = self.layer_dict['decoder'](trg, memory, tgt_mask=no_peak,tgt_key_padding_mask=trg_mask)
+    #     # , src_trg_mask) not sure if needed
+
+    #     out = self.layer_dict['local_decoder'](out)
+        
+    #     return out
+
+    def pad_mask(self, q, lens_q):
+        # print(q)
+        len_q = q.size(1)
+        mask = torch.zeros((q.shape[0],q.shape[1]),device=torch.device('cuda'))
+        for i,l in enumerate(lens_q):
+            mask[i,l:] = 1
+        return mask==1 
+
+    # def no_peak_mask(self, s):
+    #     sz = s.shape[1]
+    #     return torch.triu(torch.ones(sz, sz,device=torch.device('cuda')) * float('-inf'), diagonal=1)
+
+    # # def generate_square_subsequent_mask(sz: int) -> Tensor:
+    # #     """Generates an upper-triangular matrix of -inf, with zeros on diag."""
+    # #     return torch.triu(torch.ones(sz, sz) * float('-inf'), diagonal=1)
 
 
