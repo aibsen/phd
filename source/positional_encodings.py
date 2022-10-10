@@ -1,6 +1,8 @@
 import numpy as np
 import torch
 from torch import nn, Tensor
+import math
+
 
 class PositionalEncoding(nn.Module):
 
@@ -13,7 +15,11 @@ class PositionalEncoding(nn.Module):
         pe = torch.zeros(max_len, 1, d_model)
         pe[:, 0, 0::2] = torch.sin(position * div_term)
         pe[:, 0, 1::2] = torch.cos(position * div_term)
+        pe = pe.permute(1,0,2)
         self.register_buffer('pe', pe)
+        # print("PE")
+        # print(pe.shape)
+    
 
     def forward(self, x: Tensor) -> Tensor:
         """
@@ -22,6 +28,9 @@ class PositionalEncoding(nn.Module):
         """
         x = x + self.pe[:x.size(0)]
         return self.dropout(x)
+    
+    def reset_parameters(self):
+        pass
 
 class FourierDecomposition(nn.Module):
     

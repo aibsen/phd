@@ -9,6 +9,7 @@ import os
 import numpy as np
 import pandas as pd
 import time
+import sys
 from torchmetrics.functional import precision_recall, f1_score, accuracy
 # from utils import save_to_stats_pkl_file, load_from_stats_pkl_file, \
 #     save_statistics, load_statistics, save_classification_results
@@ -61,31 +62,20 @@ class Experiment(nn.Module):
             print("Infinite patience, early stopping won't be an option")
         
         if train_data:
-            if train_sampler is not None:
-                train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, sampler=train_sampler)
-            else:
-                train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=True)
+            train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=True)
             self.train_data = train_loader
 
         if val_data:
-            if val_sampler is not None:
-                val_loader = torch.utils.data.DataLoader(val_data,batch_size=batch_size,sampler=val_sampler)
-            else:
-                val_loader = torch.utils.data.DataLoader(val_data, batch_size=batch_size, shuffle=True)
+            val_loader = torch.utils.data.DataLoader(val_data, batch_size=batch_size, shuffle=True)
             self.val_data = val_loader
 
         if test_data:
-            if test_sampler is not None:
-                test_loader = torch.utils.data.DataLoader(test_data,batch_size=batch_size,sampler=test_sampler)
-            else:
-                test_loader = torch.utils.data.DataLoader(test_data,batch_size=batch_size,shuffle=True)
+            test_loader = torch.utils.data.DataLoader(test_data,batch_size=batch_size,shuffle=True)
             self.test_data = test_loader
 
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate, amsgrad=False,
                                     weight_decay=weight_decay_coefficient)
-        if class_weights:
-            class_weights = torch.FloatTensor(class_weights).cuda()
-        self.criterion = nn.CrossEntropyLoss(weight=class_weights).to(self.device)  # send the loss computation to the GPU
+        self.criterion = nn.CrossEntropyLoss().to(self.device)  # send the loss computation to the GPU
 
         # Generate the directory names
         self.experiment_folder = os.path.abspath(experiment_name)
@@ -99,39 +89,44 @@ class Experiment(nn.Module):
 
         # Set best model f1_score to be at 0 and the best epoch to be num_epochs, since we are just starting
         self.best_epoch = num_epochs
-        self.best_f1 = 0
+        self.best_loss = np.inf
         self.state = {}
 
     def run_train_iter(self, x, y):
         self.train()
         self.optimizer.zero_grad()  # set all weight grads from previous training iters to 0
-        out = self.model.forward(x)  # forward the data in the model
+        src = x[0].permute(0,2,1)
+        src = (src,x[1])
+        out = self.model.forward(src,src)  # forward the data in the model
+        # out = self.model.forward(x)
+        # print(out.shape)
+        # print(src[0].shape)
         loss = self.criterion(out,y)
+        # loss = self.criterion(out,src[0])
         loss.backward()  # backpropagate
         self.optimizer.step()
-        predicted = F.softmax(out.data,dim=1)
-        predicted = torch.argmax(predicted, 1)
-        return loss, predicted
+        return loss
+
+
+        #     # print(x)
+#     print(x[0].shape)
+#     src = x[0].permute(0,2,1)
+#     src = (src,x[1])
+#     a =nn(src,src)
+#     print(a.shape)
 
     def run_evaluation_iter(self, x, y):
         self.eval()  # sets the system to validation mode
-        out = self.model.forward(x)  # forward the data in the model
-        loss =  self.criterion(out,y)
-        predicted_soft = F.softmax(out.data,dim=1)
-        # predicted_soft = F.softmax(F.softmax(out.data,dim=1),dim=1)
-        # print(predicted_soft)
-        # print(predicted_soft.shape)
-        predicted = torch.argmax(predicted_soft, 1)
-        return loss, predicted, predicted_soft
+        src = x[0].permute(0,2,1)
+        src = (src,x[1])
+        out = self.model.forward(src,src)  # forward the data in the model
+        loss = self.criterion(out,y)
+        # loss = self.criterion(out,src[0])
+        return loss
 
     def save_model(self, model_save_name):
         save_path = os.path.join(self.experiment_saved_models, model_save_name)
         torch.save(self.state,save_path)
-        # state = dict()
-        # state['network'] = self.model.state_dict()  # save network parameter and other variables.
-        # state['best_val_model_idx'] = best_validation_model_idx  # save current best val idx
-        # torch.save(state, f=os.path.join(model_save_dir, "{}_{}".format(model_save_name, str(
-            # model_idx+1))))
 
     def load_model(self, model_save_dir, model_save_name):
         save_path = os.path.join(model_save_dir, model_save_name)
@@ -143,7 +138,7 @@ class Experiment(nn.Module):
         # return state['best_val_model_idx']#, state['best_val_model_acc'], state['best_val_model_f1']
 
     def save_statistics(self, stats, fn):
-        stats_keys = ['epoch', 'accuracy', 'loss', 'f1', 'precision', 'recall']
+        stats_keys = ['epoch', 'loss']
         stats_df = pd.DataFrame(stats.cpu().numpy() , columns = stats_keys)
         stats_df = stats_df[stats_df.epoch>=0]
         stats_df.epoch = stats_df.epoch.astype(int)
@@ -255,19 +250,16 @@ class Experiment(nn.Module):
 
         strike = 0
         step_count = 0
-        last_val_performance = 0
-
-        last_train_cm = torch.zeros((len(self.train_data.dataset),3), dtype=torch.int64, device=self.device) # holds ids, preds, targets
-        current_val_cm = torch.zeros((len(self.val_data.dataset),3), dtype=torch.int64, device=self.device) # holds ids, preds, targets
-        best_val_cm = torch.zeros((len(self.val_data.dataset),3), dtype=torch.int64, device=self.device) # holds ids, preds, targets
         
-        val_stats = torch.full((int(self.num_epochs/self.validation_step),6),-1, dtype=torch.float, device=self.device) # holds epoch, acc, loss, f1, precission, recall, per validation epoch
-        train_stats = torch.full((int(self.num_epochs),6),-1, dtype=torch.float, device=self.device) # holds epoch, acc, loss, f1, precission, recall, per train epoch
+        val_stats = torch.full((int(self.num_epochs/self.validation_step),2),-1, dtype=torch.float, device=self.device) # holds epoch,loss
+        train_stats = torch.full((int(self.num_epochs),2),-1, dtype=torch.float, device=self.device) # holds epoch, loss
         
         train_n_batches = len(self.train_data)
         val_n_batches = len(self.val_data)
         val_loss = -1
         val_idx = 0
+
+
 
         with tqdm.tqdm(total=self.num_epochs) as pbar_train:
 
@@ -276,20 +268,14 @@ class Experiment(nn.Module):
                 running_train_loss = 0.0
 
                 for idx, (x, y,ids) in enumerate(self.train_data):
-                    loss, preds = self.run_train_iter(x=x, y=y)
+                    # print(y)
+                    loss = self.run_train_iter(x=x, y=y)
+                    
                     running_train_loss += loss.item()
-                    torch.stack((ids,preds,y),dim=1,out=last_train_cm[idx*self.batch_size])
 
-                preds, targets = last_train_cm[:,1],last_train_cm[:,2]
-                precision, recall = precision_recall(preds,targets, num_classes=self.num_output_classes, average='macro')
                 train_loss = running_train_loss/train_n_batches
-
                 train_stats[epoch_idx,0] = epoch_idx+1 #epoch
-                train_stats[epoch_idx,1] = accuracy(preds,targets, num_classes=self.num_output_classes, average='micro') #accuracy
-                train_stats[epoch_idx,2] = train_loss #loss
-                train_stats[epoch_idx,3] = f1_score(preds,targets, num_classes = self.num_output_classes, average='macro') #f1
-                train_stats[epoch_idx,4] = precision # precision
-                train_stats[epoch_idx,5] = recall #recall
+                train_stats[epoch_idx,1] = train_loss #loss
             
                 if step_count == self.validation_step:
 
@@ -297,39 +283,28 @@ class Experiment(nn.Module):
                     running_val_loss = 0.0
 
                     for idx, (x, y, ids) in enumerate(self.val_data):
-                        loss, preds, _ = self.run_evaluation_iter(x=x, y=y)
+                        loss = self.run_evaluation_iter(x=x, y=y)
                         running_val_loss += loss.item()
-                        torch.stack((ids,preds,y),dim=1,out=current_val_cm[idx*self.batch_size])
 
-                    preds, targets = current_val_cm[:,1],current_val_cm[:,2]
-                    precision, recall = precision_recall(preds,targets, num_classes=self.num_output_classes, average='macro')
-                    f1 = f1_score(preds,targets, num_classes=self.num_output_classes, average='macro')
                     val_loss = running_val_loss/val_n_batches
-
                     val_stats[val_idx,0] = epoch_idx+1 #epoch
-                    val_stats[val_idx,1] = accuracy(preds,targets, num_classes=self.num_output_classes, average='micro') #accuracy
-                    val_stats[val_idx,2] = val_loss #loss
-                    val_stats[val_idx,3] = f1 #f1
-                    val_stats[val_idx,4] = precision # precision
-                    val_stats[val_idx,5] = recall #recall
+                    val_stats[val_idx,1] = val_loss #loss
                     val_idx+=1
 
                     #if the f1-score of the current epoch for the validation set is better than previous epochs
-                    if f1 > self.best_f1:
-                        best_val_cm = current_val_cm
-                        self.best_f1 = f1
+                    if val_loss < self.best_loss:
+                        self.best_loss = val_loss
                         self.best_epoch = epoch_idx
                         self.state = {
                             'epoch': epoch_idx,
                             'model': self.model.state_dict(),
                             'optimizer':self.optimizer.state_dict(),
-                            'f1':f1
+                            'loss':val_loss
                         }
                         strike = 0
 
                     else:
                         strike+=1
-
 
                 pbar_train.update(1)
                 elapsed_time = time.time() - start_time 
@@ -342,9 +317,7 @@ class Experiment(nn.Module):
         #save statistics at the end only
         self.save_model("best_validation_model.pth.tar")
         self.save_statistics(train_stats, 'training_summary.csv')
-        self.save_results(last_train_cm, 'training_results.csv')
         self.save_statistics(val_stats, 'validation_summary.csv')
-        self.save_results(best_val_cm, 'validation_results.csv')
     
     
     def run_experiment(self):
@@ -357,13 +330,13 @@ class Experiment(nn.Module):
             print("Starting training phase")
             print("")
             self.run_train_phase()
-            print("")
-            print("Starting final training phase")
-            print("")
-            self.run_final_train_phase()
+        #     print("")
+        #     print("Starting final training phase")
+        #     print("")
+        #     self.run_final_train_phase()
 
-        if self.test_data:
-            print("")
-            print("Starting test phase")
-            print("")
-            self.run_test_phase(self.test_data)
+        # if self.test_data:
+        #     print("")
+        #     print("Starting test phase")
+        #     print("")
+        #     self.run_test_phase(self.test_data)
