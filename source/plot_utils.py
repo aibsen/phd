@@ -74,32 +74,57 @@ def plot_raw_lcs(lcs, rows, cols):
         ax.set(xlabel='time', ylabel='flux')
 
 
-def plot_raw_and_interpolated_lcs(raw_lcs, interpolated_lcs):
-    rows = 4 #one for each type
+def plot_raw_and_interpolated_lcs(raw_lcs, interpolated_lcs, units='flux'):
+    rows = 1 
     cols = 2 #one for raw data and one for interpolated data
     fig, axs = plt.subplots(rows,cols,figsize=(25,20))
     #split into bands
-    for i in np.arange(rows):
-        #plot raw lcs
-        r=np.array(list(filter(lambda p: p["band"]=='ztfr' , raw_lcs[i])))
-        g=np.array(list(filter(lambda p: p["band"]=='ztfg' , raw_lcs[i])))
+    raw_r = raw_lcs[raw_lcs.passband==0]
+    raw_g = raw_lcs[raw_lcs.passband==1]
 
-        r_t = np.array(list(map(lambda p: p["time"], r)))
-        r_f = np.array(list(map(lambda p: p["flux"], r)))
-        r_e = np.array(list(map(lambda p: p["fluxerr"], r)))
 
-        g_t = np.array(list(map(lambda p: p["time"], g)))
-        g_f = np.array(list(map(lambda p: p["flux"], g)))
-        g_e = np.array(list(map(lambda p: p["fluxerr"], g)))
+    interp_r = interpolated_lcs[interpolated_lcs.passband==0]
+    interp_g = interpolated_lcs[interpolated_lcs.passband==1]
 
-        axs[i][0].errorbar(r_t, r_f, yerr= r_e,fmt='ro')
-        axs[i][0].errorbar(g_t, g_f, yerr= g_e,fmt='go')
+    if units == 'flux':
+        axs[0].errorbar(raw_r.mjd, raw_r.flux, yerr=raw_r.flux_err)
+        axs[0].errorbar(raw_g.mjd, raw_g.flux, yerr=raw_g.flux_err)
 
-        #plot interpolated lcs
-        axs[i][1].plot(interpolated_lcs[i][0].cpu(),'ro')
-        axs[i][1].plot(interpolated_lcs[i][1].cpu(),'go')
-    for ax in axs.flat:
-        ax.set(xlabel='time', ylabel='flux')
+        axs[1].errorbar(interp_r.mjd, interp_r.flux, yerr=interp_r.flux_err)
+        axs[1].errorbar(interp_g.mjd, interp_g.flux, yerr=interp_g.flux_err)
+    elif units == 'mag':
+        axs[0].errorbar(raw_r.mjd, raw_r.magpsf, yerr=raw_r.sigmagpsf)
+        axs[0].errorbar(raw_g.mjd, raw_g.magpsf, yerr=raw_g.sigmagpsf)
+        axs[0].invert_yaxis()
+
+        axs[1].errorbar(interp_r.mjd, interp_r.magpsf, yerr=interp_r.sigmagpsf)
+        axs[1].errorbar(interp_g.mjd, interp_g.magpsf, yerr=interp_g.sigmagpsf)
+        axs[1].invert_yaxis()
+    else:
+        print("Units needs to be either flux or mag")
+    plt.show()
+    # for i in np.arange(rows):
+    #     #plot raw lcs
+    #     r=np.array(list(filter(lambda p: p["passband"]=='0' , raw_lcs[i])))
+    #     g=np.array(list(filter(lambda p: p["passband"]=='1' , raw_lcs[i])))
+    #     print(r)
+
+    #     r_t = np.array(list(map(lambda p: p["time"], r)))
+    #     r_f = np.array(list(map(lambda p: p["flux"], r)))
+    #     r_e = np.array(list(map(lambda p: p["fluxerr"], r)))
+
+    #     g_t = np.array(list(map(lambda p: p["time"], g)))
+    #     g_f = np.array(list(map(lambda p: p["flux"], g)))
+    #     g_e = np.array(list(map(lambda p: p["fluxerr"], g)))
+
+    #     axs[i][0].errorbar(r_t, r_f, yerr= r_e,fmt='ro')
+    #     axs[i][0].errorbar(g_t, g_f, yerr= g_e,fmt='go')
+
+    #     #plot interpolated lcs
+    #     axs[i][1].plot(interpolated_lcs[i][0].cpu(),'ro')
+    #     axs[i][1].plot(interpolated_lcs[i][1].cpu(),'go')
+    # for ax in axs.flat:
+    #     ax.set(xlabel='time', ylabel='flux')
 
 
 def plot_lcs_df(lc_num,data,tags):

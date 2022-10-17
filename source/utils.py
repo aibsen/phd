@@ -7,6 +7,43 @@ import torch
 import argparse
 
 
+
+simsurvey_ztf_type_dict = {
+    '0':'Ia',
+    '1':'Ia-91bg', 
+    '2':'Iax',  
+    '3':'IIP', 
+    '4':'Ibc',
+    '5':'SLSN',
+    '6':'IIn'
+}
+
+plasticc_type_dict = {
+    '90':'SN-Ia',
+    '67':'SN-Ia-91BG', 
+    '52':'SN-Iax',  
+    '42':'SN-II', 
+    '62':'SN-Ib/c',
+    '95':'SLSN',
+    '15':'TDE',
+    '64':'KN',
+    '88':'AGN'
+    # '92':'RRL',
+    # '65':'M-dwarf',
+    # '16':'EB',
+    # '53':'Mira',
+    # '6':'uLens-Single',
+    # '99':'Class 99'
+    # # '991':'uLens-Binary',
+    # '992':'ILOT',
+    # '993':'CART',
+    # '994': 'PISN'
+}
+
+plasticc_types = [90,67,52,42,62,95,15,64,88]
+#,92,65,16,53,6,99]
+plasticc_names = [plasticc_type_dict[k] for k in plasticc_type_dict]
+
 def save_to_stats_pkl_file(experiment_log_filepath, filename, stats_dict):
     summary_filename = os.path.join(experiment_log_filepath, filename)
     with open("{}.pkl".format(summary_filename), "wb") as file_writer:
@@ -37,61 +74,57 @@ def save_classification_results(experiment_log_dir, filename, results,ids,tags,n
 #         for key in my_dict.keys():
 #             f.write("%s,%s\n"%(key,my_dict[key]))
 
-# def save_statistics(experiment_log_dir, filename, stats_dict, current_epoch, save_full_dict=False):
-#     """
-#     Saves the statistics in stats dict into a csv file. Using the keys as the header entries and the values as the
-#     columns of a particular header entry
-#     :param experiment_log_dir: the log folder dir filepath
-#     :param filename: the name of the csv file
-#     :param stats_dict: the stats dict containing the data to be saved
-#     :param current_epoch: the number of epochs since commencement of the current training session (i.e. if the experiment continued from 100 and this is epoch 105, then pass relative distance of 5.)
-#     :param save_full_dict: whether to save the full dict as is overriding any previous entries (might be useful if we want to overwrite a file)
-#     :return: The filepath to the summary file
-#     """
-#     print(stats_dict)
-#     summary_filename = os.path.join(experiment_log_dir, filename)
-#     mode = 'w' if ((current_epoch == 0) or (save_full_dict == True)) else 'a'
-#     with open(summary_filename, mode) as f:
-#         writer = csv.writer(f)
-#         if current_epoch == 0:
-#             writer.writerow(list(stats_dict.keys()))
+def save_statistics(experiment_log_dir, filename, stats_dict, current_epoch, save_full_dict=False):
+    """
+    Saves the statistics in stats dict into a csv file. Using the keys as the header entries and the values as the
+    columns of a particular header entry
+    :param experiment_log_dir: the log folder dir filepath
+    :param filename: the name of the csv file
+    :param stats_dict: the stats dict containing the data to be saved
+    :param current_epoch: the number of epochs since commencement of the current training session (i.e. if the experiment continued from 100 and this is epoch 105, then pass relative distance of 5.)
+    :param save_full_dict: whether to save the full dict as is overriding any previous entries (might be useful if we want to overwrite a file)
+    :return: The filepath to the summary file
+    """
+    summary_filename = os.path.join(experiment_log_dir, filename)
+    mode = 'w' if ((current_epoch == 0) or (save_full_dict == True)) else 'a'
+    with open(summary_filename, mode) as f:
+        writer = csv.writer(f)
+        if current_epoch == 0:
+            writer.writerow(list(stats_dict.keys()))
 
-#         if save_full_dict:
-#             total_rows = len(list(stats_dict.values())[0])
-#             for idx in range(total_rows):
-#                 row_to_add = ["" if len(value) == 0 else value[idx] for value in list(stats_dict.values())]
-#                 writer.writerow(row_to_add)
-#         else:
-#             # row_to_add = [value[current_epoch] for value in list(stats_dict.values())]
-#             row_to_add = ["" if len(value) == 0 else value[current_epoch] for value in list(stats_dict.values())]
-#             print(row_to_add)
-#             quit()
-#             writer.writerow(row_to_add)
+        if save_full_dict:
+            total_rows = len(list(stats_dict.values())[0])
+            for idx in range(total_rows):
+                row_to_add = [value[idx] for value in list(stats_dict.values())]
+                writer.writerow(row_to_add)
+        else:
+            row_to_add = [value[current_epoch] for value in list(stats_dict.values())]
+            writer.writerow(row_to_add)
 
-#     return summary_filename
+    return summary_filename
 
 
-# def load_statistics(experiment_log_dir, filename):
-#     """
-#     Loads a statistics csv file into a dictionary
-#     :param experiment_log_dir: the log folder dir filepath
-#     :param filename: the name of the csv file to load
-#     :return: A dictionary containing the stats in the csv file. Header entries are converted into keys and columns of a
-#      particular header are converted into values of a key in a list format.
-#     """
-#     summary_filename = os.path.join(experiment_log_dir, filename)
+def load_statistics(experiment_log_dir, filename):
+    """
+    Loads a statistics csv file into a dictionary
+    :param experiment_log_dir: the log folder dir filepath
+    :param filename: the name of the csv file to load
+    :return: A dictionary containing the stats in the csv file. Header entries are converted into keys and columns of a
+     particular header are converted into values of a key in a list format.
+    """
+    summary_filename = os.path.join(experiment_log_dir, filename)
 
-#     with open(summary_filename, 'r+') as f:
-#         lines = f.readlines()
+    with open(summary_filename, 'r+') as f:
+        lines = f.readlines()
 
-#     keys = lines[0].split(",")
-#     stats = {key: [] for key in keys}
-#     for line in lines[1:]:
-#         values = line.split(",")
-#         for idx, value in enumerate(values):
-#             stats[keys[idx]].append(value)
+    keys = lines[0].split(",")
+    stats = {key: [] for key in keys}
+    for line in lines[1:]:
+        values = line.split(",")
+        for idx, value in enumerate(values):
+            stats[keys[idx]].append(value)
 
-#     return stats
+    return stats
 
 
 def find_best_epoch(f):

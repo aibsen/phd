@@ -1,57 +1,81 @@
 
 from re import L
+import math
 import pandas as pd
 import numpy as np
 import h5py
+import george
+from typing import Dict, List
+from functools import partial
+from astropy.table import Table, vstack
+import scipy.optimize as op
 
 # plasticc_sn_tags = {'90':0, '67':1, '52':2, '42':3, '62': 4, '95': 5}
+# (r=0, g=1)
 plasticc_sn_tags =[90,67,52,42,62,95]
+ZTF_PB_WAVELENGTHS = {
+    "1": 4804.79,
+    "0": 6436.92,
+}
 
-def retag_plasticc(metadata):
-    #choosing supernovae only
-    sn_metadata = metadata[metadata["true_target"].isin(plasticc_sn_tags)].copy()
-    sn_metadata.loc[:,"true_target"] = [plasticc_sn_tags.index(tag) for tag in sn_metadata["true_target"]]
-    return sn_metadata
+def create_uneven_vectors(data, metadata, n_channels=2,timesteps=128):
+    #in mjd, 12 hrs = 0.5
+    max_dt = 0.5
 
-def filter_metadata_by_type(metadata,types_I_want):
-#receives a dict with of types by name as provided by TNS and the numerical tags I want to give them
-    metadata = metadata[metadata["Obj. Type"].isin(types_I_want.keys())]
-    for k,v in types_I_want.items():
-        metadata.loc[metadata["Obj. Type"]==k,"tag"] = v
-    return metadata
+    data['diff'] = data.groupby(["object_id",'passband'])["mjd"].diff().fillna(1) #the first element of each group counts as observation start
+    data["gt"] = data['diff'].gt(max_dt)
+    data = data.sort_values(by=['object_id', 'passband','mjd'])
+    data['group'] = data['gt'].cumsum()
 
-#receives a filename that contains the simsurvey simulated lightcurves and returns
-# a dataframe with the light curves with a sensible format for easier handling.
-def pkl_to_df(pkl_filename, first_id = 0):
-    sn_data = pd.read_pickle(pkl_filename)
-    df = pd.DataFrame(data=sn_data["lcs"], dtype=np.int8)
-    df_sn = df.stack(dropna=True)
-    df_sn = df_sn.to_frame()
-    df_sn.reset_index(level=0, inplace=True)
-    df_sn=df_sn.rename(columns={"level_0": "id", 0: "X"})
-    df_sn["id"]= df_sn["id"]+first_id
-    df_sn["time"] = df_sn["X"].str[0]
-    df_sn["band"] = df_sn["X"].str[1]
-    df_sn["flux"] = df_sn["X"].str[2]
-    df_sn["fluxerr"] = df_sn["X"].str[3]
-    df_sn= df_sn.drop("X",axis=1)
-    df_sn=df_sn[df_sn.band != 'desi']
-    df_sn.loc[df_sn.band == 'ztfr', 'band'] = 0
-    df_sn.loc[df_sn.band == 'ztfg', 'band'] = 1
-    return df_sn
+    data['e_log_error'] = np.exp(-np.log(data.flux_err))
+    cum_err_by_group = data.groupby('group').e_log_error.sum()
+    cum_err_by_group = dict(zip(cum_err_by_group.index,cum_err_by_group.values))
+    data['cum_err'] = data.group.map(cum_err_by_group)
+    data['weights'] = data.e_log_error/data.cum_err
+    data['flux_weight'] = data.flux * data.weights
 
+    new_flux = data.groupby('group').mean()
+    metadata = metadata.sort_values(by='object_id')
 
-#receives dataframe with lightcurves of a type
-#returns a series? with a tag for all of the ids
-def df_tags(df_sn, t):
-    # print(len(df_sn))
-    sn_ids = df_sn.id.unique()
-    df_sn_tags = pd.DataFrame(data=sn_ids, columns = ["id"])
-    df_sn_tags.loc[:,"type"] = t
-    return df_sn_tags
+    flux_to_mag = lambda f: 30-2.5*math.log10(f)
+    fluxerr_to_sigmag = lambda ferr,f: np.sqrt(np.abs(2.5/math.log(10)*(ferr/f)))
 
+    new_flux['magpsf'] = [flux_to_mag(f) for f in new_flux.flux_weight.values]
+    new_flux['sigmagpsf'] = [fluxerr_to_sigmag(ferr, f) for ferr,f in zip(new_flux.flux_weight.values, new_flux.flux_err.values)]
 
-def create_interpolated_vectors(data, length, n_channels=6):
+    #standarize 
+    new_flux['magpsf'] = (new_flux.magpsf - np.mean(new_flux.magpsf.values)/np.std(new_flux.magpsf.values))
+    new_flux = new_flux.sort_values(by=['object_id','mjd'])
+    
+    #finally put vectors together
+    # we wont take log of fluxes, since we are using mags already
+    assert((metadata.object_id==new_flux.object_id.unique()).all())
+    ids = new_flux.object_id.unique()
+    max_length = new_flux.groupby('object_id').object_id.count().max()
+    X = np.full((ids.shape[0],new_flux.passband.unique().shape[0]+2,max_length),-np.inf)
+    # lens = np.zeros((ids.shape[0]))
+    for i,id in enumerate(ids):
+    
+        lc = new_flux[new_flux.object_id==id]
+        mag = lc.flux.values
+        mjd = lc.mjd.values
+        passband = lc.passband.values
+        l = mag.shape[0]
+        # lens[i] = l
+        X[i,0,0:l] = mag
+        pp = np.array([[1,0] if p==0 else [0,1] for p in passband])
+        X[i,1:3,0:l] = pp.swapaxes(1,0) 
+        X[i,3,0:l] = mjd
+        assert((X[i,1,0:l].astype('bool')==~X[i,2,0:l].astype(bool)).all())
+
+    #truncate to 1st 128 observations sth like 60-128 days
+    X = X[:,:,0:128]
+    # lens = lens[0:128]
+    Y = metadata.true_target.values
+    assert(X.shape[0]==Y.shape[0] and Y.shape[0]==ids.shape[0])
+    return X, ids, Y
+
+def create_interpolated_vectors(data, length, n_channels=2):
 
     data_cp = data.copy()
     data_cp['ob_p']= data.object_id*10+data.passband
@@ -134,6 +158,277 @@ def create_interpolated_vectors(data, length, n_channels=6):
     return vectors, ids
 
 
+
+#modified from https://github.com/tallamjr/astronet/blob/master/astronet/preprocess.py
+def predict_2d_gp(gp_predict, gp_times, gp_wavelengths):
+    """Outputs the predictions of a Gaussian Process.
+    Parameters
+    ----------
+    gp_predict : functools.partial of george.gp.GP
+        The GP instance that was used to fit the object.
+    gp_times : numpy.ndarray
+        Times to evaluate the Gaussian Process at.
+    gp_wavelengths : numpy.ndarray
+        Wavelengths to evaluate the Gaussian Process at.
+    Returns
+    -------
+    obj_gps : pandas.core.frame.DataFrame, optional
+        Time, flux and flux error of the fitted Gaussian Process.
+    Examples
+    --------
+    >>> gp_predict = fit_2d_gp(df, pb_wavelengths=pb_wavelengths)
+    >>> number_gp = timesteps
+    >>> gp_times = np.linspace(min(df["mjd"]), max(df["mjd"]), number_gp)
+    >>> obj_gps = predict_2d_gp(gp_predict, gp_times, gp_wavelengths)
+    >>> obj_gps["filter"] = obj_gps["filter"].map(inverse_pb_wavelengths)
+    ...
+    """
+    unique_wavelengths = np.unique(gp_wavelengths)
+    number_gp = len(gp_times)
+    obj_gps = []
+    for wavelength in unique_wavelengths:
+        gp_wavelengths = np.ones(number_gp) * wavelength
+        pred_x_data = np.vstack([gp_times, gp_wavelengths]).T
+        pb_pred, pb_pred_var = gp_predict(pred_x_data, return_var=True)
+        # stack the GP results in a array momentarily
+        obj_gp_pb_array = np.column_stack((gp_times, pb_pred, np.sqrt(pb_pred_var)))
+        obj_gp_pb = Table(
+            [
+                obj_gp_pb_array[:, 0],
+                obj_gp_pb_array[:, 1],
+                obj_gp_pb_array[:, 2],
+                [wavelength] * number_gp,
+            ],
+            names=["mjd", "flux", "flux_err", "passband"],
+        )
+        if len(obj_gps) == 0:  # initialize the table for 1st passband
+            obj_gps = obj_gp_pb
+        else:  # add more entries to the table
+            obj_gps = vstack((obj_gps, obj_gp_pb))
+
+    obj_gps = obj_gps.to_pandas()
+    return obj_gps
+
+
+def fit_2d_gp(
+    obj_data: pd.DataFrame,
+    return_kernel: bool = False,
+    pb_wavelengths: Dict = ZTF_PB_WAVELENGTHS,
+    **kwargs,
+):
+    """Fit a 2D Gaussian process.
+    If required, predict the GP at evenly spaced points along a light curve.
+    Parameters
+    ----------
+    obj_data : pd.DataFrame
+        Time, flux and flux error of the data (specific filter of an object).
+    return_kernel : bool, default = False
+        Whether to return the used kernel.
+    pb_wavelengths: dict
+        Mapping of the passband wavelengths for each filter used.
+    kwargs : dict
+        Additional keyword arguments that are ignored at the moment. We allow
+        additional keyword arguments so that the various functions that
+        call this one can be called with the same arguments.
+    Returns
+    -------
+    kernel: george.gp.GP.kernel, optional
+        The kernel used to fit the GP.
+    gp_predict : functools.partial of george.gp.GP
+        The GP instance that was used to fit the object.
+    Examples
+    --------
+    gp_wavelengths = np.vectorize(pb_wavelengths.get)(filters)
+    inverse_pb_wavelengths = {v: k for k, v in pb_wavelengths.items()}
+    gp_predict = fit_2d_gp(df, pb_wavelengths=pb_wavelengths)
+    ...
+    """
+    guess_length_scale = 20.0  # a parameter of the Matern32Kernel
+
+    obj_times = obj_data.mjd.astype(float)
+    obj_flux = obj_data.flux.astype(float)
+    obj_flux_error = obj_data.flux_err.astype(float)
+    obj_wavelengths = obj_data["passband"].astype(str).map(pb_wavelengths)
+
+    def neg_log_like(p):  # Objective function: negative log-likelihood
+        gp.set_parameter_vector(p)
+        loglike = gp.log_likelihood(obj_flux, quiet=True)
+        return -loglike if np.isfinite(loglike) else 1e25
+
+    def grad_neg_log_like(p):  # Gradient of the objective function.
+        gp.set_parameter_vector(p)
+        return -gp.grad_log_likelihood(obj_flux, quiet=True)
+
+    # Use the highest signal-to-noise observation to estimate the scale. We
+    # include an error floor so that in the case of very high
+    # signal-to-noise observations we pick the maximum flux value.
+    signal_to_noises = np.abs(obj_flux) / np.sqrt(
+        obj_flux_error**2 + (1e-2 * np.max(obj_flux)) ** 2
+    )
+    scale = np.abs(obj_flux[signal_to_noises.idxmax()])
+
+    kernel = (0.5 * scale) ** 2 * george.kernels.Matern32Kernel(
+        [guess_length_scale**2, 6000**2], ndim=2
+    )
+    kernel.freeze_parameter("k2:metric:log_M_1_1")
+
+    gp = george.GP(kernel)
+    default_gp_param = gp.get_parameter_vector()
+    x_data = np.vstack([obj_times, obj_wavelengths]).T
+    gp.compute(x_data, obj_flux_error)
+
+    bounds = [(0, np.log(1000**2))]
+    bounds = [(default_gp_param[0] - 10, default_gp_param[0] + 10)] + bounds
+    results = op.minimize(
+        neg_log_like,
+        gp.get_parameter_vector(),
+        jac=grad_neg_log_like,
+        method="L-BFGS-B",
+        bounds=bounds,
+        tol=1e-6,
+    )
+
+    if results.success:
+        gp.set_parameter_vector(results.x)
+    else:
+        # Fit failed. Print out a warning, and use the initial guesses for fit
+        # parameters.
+        obj = obj_data["object_id"][0]
+        print("GP fit failed for {}! Using guessed GP parameters.".format(obj))
+        gp.set_parameter_vector(default_gp_param)
+
+    gp_predict = partial(gp.predict, obj_flux)
+
+    if return_kernel:
+        return kernel, gp_predict
+    return gp_predict
+
+
+
+def generate_gp_single_event(
+    df: pd.DataFrame, timesteps: int = 100, pb_wavelengths: Dict = ZTF_PB_WAVELENGTHS
+) -> pd.DataFrame:
+    """Intermediate helper function useful for visualisation of the original data with the mean of
+    the Gaussian Process interpolation as well as the uncertainity.
+    Additional steps required to build full dataframe for classification found in
+    `generate_gp_all_objects`, namely:
+        ...
+        obj_gps = pd.pivot_table(obj_gps, index="mjd", columns="filter", values="flux")
+        obj_gps = obj_gps.reset_index()
+        obj_gps["object_id"] = object_id
+        ...
+    To allow a transformation from:
+        mjd	        flux	    flux_error	filter
+    0	0.000000	19.109279	0.176179	1(ztfg)
+    1	0.282785	19.111843	0.173419	1(ztfg)
+    2	0.565571	19.114406	0.170670	1(ztfg)
+    to ...
+    filter	mjd	        ztfg    ztfr	object_id
+    0	    0	        19.1093	19.2713	27955532126447639664866058596
+    1	    0.282785	19.1118	19.2723	27955532126447639664866058596
+    2	    0.565571	19.1144	19.2733	27955532126447639664866058596
+    Examples
+    --------
+    obj_gps = generate_gp_single_event(data)
+    ax = plot_event_data_with_model(data, obj_model=_obj_gps, pb_colors=ZTF_PB_COLORS)
+    """
+
+    filters = df["passband"].astype(str)
+    filters = list(np.unique(filters))
+
+    gp_wavelengths = np.vectorize(pb_wavelengths.get)(filters)
+    inverse_pb_wavelengths = {v: k for k, v in pb_wavelengths.items()}
+
+    gp_predict = fit_2d_gp(df, pb_wavelengths=pb_wavelengths)
+
+    number_gp = timesteps
+    gp_times = np.linspace(min(df["mjd"]), max(df["mjd"]), number_gp)
+    obj_gps = predict_2d_gp(gp_predict, gp_times, gp_wavelengths)
+    obj_gps["passband"] = obj_gps["passband"].map(inverse_pb_wavelengths)
+    obj_gps["passband"] = obj_gps["passband"].astype(int)
+
+    return obj_gps
+
+def create_gp_interpolated_vectors(
+    object_list: List[str],
+    obs_transient: pd.DataFrame,
+    obs_metadata: pd.DataFrame,
+    timesteps: int = 100,
+    pb_wavelengths: Dict = ZTF_PB_WAVELENGTHS,
+) -> pd.DataFrame:
+    """Generate Gaussian Process interpolation for all objects within 'object_list'. Upon
+    completion, a dataframe is returned containing a value for each time step across each passband.
+    Parameters
+    ----------
+    object_list: List[str]
+        List of objects to apply the transformation to
+    obs_transient: pd.DataFrame
+        Dataframe containing observational points with the transient section of the full light curve
+    timesteps: int
+        Number of points one would like to interpolate, i.e. how many points along the time axis
+        should the Gaussian Process be evaluated
+    pb_wavelengths: Dict
+        A mapping of passbands and the associated wavelengths, specific to each survey. Current
+        options are ZTF or LSST
+    Returns
+    -------
+    df: pd.DataFrame(data=adf, columns=obj_gps.columns)
+        Dataframe with the mean of the GP for N x timesteps
+    Examples
+    --------
+    ?>>> object_list = list(np.unique(df["object_id"]))
+    ?>>> obs_transient, object_list = __transient_trim(object_list, df)
+    ?>>> generated_gp_dataset = generate_gp_all_objects(
+        object_list, obs_transient, timesteps, LSST_PB_WAVELENGTHS
+        )
+    ...
+    """
+
+    filters = obs_transient["passband"]
+    filters = list(np.unique(filters))
+
+    columns = []
+    columns.append("mjd")
+    # for filt in filters:
+    #     columns.append(filt)
+    columns.append("object_id")
+    columns.append("passband")
+
+    adf = pd.DataFrame(
+        data=[],
+        columns=columns,
+    )
+    id_list = []
+    targets = []
+    n_lcs = len(object_list)
+    n_channels = 2
+    X = np.ones((n_lcs, n_channels, timesteps)) #if flux is negative, set it to 1, so it can be converted to mag
+    #if flux_err is negative, make it positive
+    for i,object_id in enumerate(object_list):
+        print(f"OBJECT ID:{object_id} at INDEX:{object_list.index(object_id)}")
+        df = obs_transient[obs_transient["object_id"] == object_id]
+
+        obj_gps = generate_gp_single_event(df, timesteps, pb_wavelengths)
+        # print(obj_gps)
+
+        obj_gps = pd.pivot_table(obj_gps, index="mjd", columns="passband", values="flux")
+        # print(obj_gps)
+        X[i,0,:] = obj_gps[0]
+        X[i,1,:] = obj_gps[1]
+        id_list.append(object_id)
+        true_target = obs_metadata[obs_metadata.object_id==object_id].true_target.values[0]
+        targets.append(true_target)
+        # break
+    #     obj_gps = obj_gps.reset_index()
+        # obj_gps["object_id"] = object_id
+        # adf = np.vstack((adf, obj_gps))
+    
+    X = np.where(X>0,X,1)
+    # print(X)
+    print(X)
+    return X, id_list,targets
+    # return pd.DataFrame(data=obj_gps, columns=obj_gps.columns)
+
 def append_vectors(dataset,outputFile):
     with h5py.File(outputFile, 'a') as hf:
         X=dataset["X"]
@@ -148,7 +443,6 @@ def append_vectors(dataset,outputFile):
         hf["Y"].resize((hf["Y"].shape[0] + Y.shape[0]), axis = 0)
         hf["Y"][-Y.shape[0]:] = Y
         hf.close()
-
 
 
 def save_vectors(dataset, outputFile):
@@ -169,119 +463,4 @@ def save_vectors(dataset, outputFile):
     
     hf.close()
 
-def flux_to_abmag(f,zp=30):
-    return zp-2.5*np.log10(f)
 
-def abmag_to_flux(mag,zp=30):
-    return np.power(10,(zp-mag)/2.5)
-
-def is_flux_to_abmag_working(filename):
-    trial = pd.read_pickle(filename)
-    lcs_100 = trial["lcs"][0:100]
-    stats = trial["stats"]
-    maxmg_100=stats["mag_max"]["ztfg"][0:100]
-    maxmr_100=stats["mag_max"]["ztfr"][0:100]
-    maxfg_100=np.zeros(100)
-    maxfr_100=np.zeros(100)
-    for count in np.arange(100):
-        r=np.array(list(filter(lambda p: p["band"]=='ztfr' , lcs_100[count])))
-        g=np.array(list(filter(lambda p: p["band"]=='ztfg' , lcs_100[count])))
-
-        maxfr_100[count] = np.amax(np.array(list(map(lambda p: p["flux"], r))))
-        maxfg_100[count]= np.amax(np.array(list(map(lambda p: p["flux"], g))))
-    df_trial_100 = pd.DataFrame({"mg":maxmg_100, "mr":maxmr_100, "fg":maxfg_100, "fr":maxfr_100})
-    df_trial_100["fg"]=flux_to_abmag(df_trial_100["fg"].values)
-    df_trial_100["fr"]=flux_to_abmag(df_trial_100["fr"].values)
-    if (df_trial_100["fg"]==df_trial_100["mg"]).all() and (df_trial_100["fr"]==df_trial_100["mr"]).all():
-        print("yes is is")
-    else:
-        print("no it ain't")
-
-def load_real_lcs(sn_filename):
-    sn = pd.read_csv(sn_filename,sep="|").dropna(axis=1)
-    sn.dropna(axis=1)
-    #rename columns
-    sn.columns = ["id","time","flux","flux_err","band"]
-    #make passbands consistent with simulated data (0,1 instad of 1,2)
-    sn.loc[sn["band"]==2,"band"] = 0
-    return sn
-
-def check_lc_length(data, percentile=None):
-    #td_threshold: time difference threshold in mjd
-
-    #different ids for different passbands
-    data_cp = data.copy()
-    # print(data_cp)
-    # data_cp['id_b']=data.id+data.band.astype('str')
-    data_cp['id_b']=data.id+data.band.apply(lambda band: str(band))
-
-    #get ids of real objects that have at least d days of observations
-    #d is defined as the value which percentile% of the data falls below
-    group_by_id = data_cp.groupby(['id'])['time'].agg(['min', 'max']).rename(columns = lambda x : 'time_' + x).reset_index()
-    group_by_id["time_diff"]=group_by_id.time_max-group_by_id.time_min
-    group_by_id_band = data_cp.groupby(['id','band'])['time'].agg(['count']).rename(columns = lambda x : 'time_' + x).reset_index()
-
-    if percentile :
-        td_stats=group_by_id.describe()
-        #get percentile threshold value. x% of data falls below this value.
-        td_threshold=td_stats.loc[percentile,'time_diff']
-        print("time diff threshold for percentile ",percentile, " is ",td_threshold)
-        ids_enough_obs_days=group_by_id[group_by_id.time_diff>td_threshold].id.values
-        #get ids of real objects that have at least c points per passband
-        #c is defined as the value which percentile% of the data falls below
-        # td_stats=group_by_id_band.describe()
-        # tc_threshold=td_stats.loc[percentile,'time_count']
-        # print("point count threshold for percentile ",percentile, " is ",tc_threshold)
-        # group_by_id_band=group_by_id_band[group_by_id_band.time_count>tc_threshold]
-
-    else :
-        ids_enough_obs_days=group_by_id[group_by_id.time_diff>40].id.values
-        td_threshold=40
-
-    group_by_id_band = group_by_id_band.groupby(['id']).count()
-    ids_enough_point_count = group_by_id_band[group_by_id_band.time_count==2]
-    return td_threshold, list(set(ids_enough_point_count.index.values))
-
-def ids_for_lasair():
-    """it takes a tns metafile and returns a string-like list of ids to use to query lasair with
-    !!!need to check out format"""
-    real_sns = pd.read_csv(metadata_file)
-
-    ids = real_sns["Disc. Internal Name"].drop_duplicates()
-    ids = ids.dropna()
-    ids = ids[ids.str.contains("ZTF")]
-    ids = ids.str.split(",").apply(lambda x: x[0].strip() if "ZTF" in x[0] else x[1].strip()).values
-
-    id_str = ''
-    for i in ids:
-        id_str= id_str+'"'+i+'", '
-    
-    return id_str
-
-# data_file="tns_search_sn_metadata.csv"
-# metadata_file = current_real_data_dir+data_file
-# colors = ['#00dbdd','#fd8686','#f9d62d','#b5d466','#ffa77c']
-# sn_dict = {'SN Ia':'Ia', 'SN Ib':'Ib/c', 'SN Ic':'Ib/c', 'SN II':'II','SLSN':'SLSN'}
-# plot_sns_by_type(sn_dict, metadata_file, colors)
-# plot_sns_by_date(metadata_file,colors[-1])
-
-# def merge_metadata(current_real_data_dir, n_files=5):
-# #this function is for reading metadata files downloaded from tns server and merging
-# #them together into one for later easier analysis. it receives the initial data
-# #directory and the number of files in it.
-
-#     data_file = "tns_search.csv"
-#     df=pd.read_csv(current_real_data_dir+data_file)
-
-#     for i in np.arange(1,n_files+1):
-#         data_file = current_real_data_dir+"tns_search({}).csv".format(i)
-#         print(data_file)
-#         df2 = pd.read_csv(data_file)
-#         df = pd.concat([df,df2])
-#         # print(df.head())
-#         print(df.shape)
-
-#     print(df.keys())
-#     df=df.drop_duplicates(keep="first")
-
-#     df.to_csv(current_real_data_dir+"tns_search_sn_metadata.csv",index=False)
