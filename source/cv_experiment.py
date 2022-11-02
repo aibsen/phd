@@ -10,9 +10,7 @@ import os
 import numpy as np
 import time
 from sklearn.model_selection import StratifiedKFold
-from datasets import LCs, CachedLCs
-from data_samplers import CachedRandomSampler
-from dataset_utils import cached_crossvalidator_split
+from datasets import LCs
 from experiment import Experiment
 from utils import find_best_epoch
 from plot_utils import *

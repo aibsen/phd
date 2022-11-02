@@ -103,6 +103,8 @@ class Experiment(nn.Module):
         self.state = {}
 
     def run_train_iter(self, x, y):
+        # print(x.shape)
+
         self.train()
         self.optimizer.zero_grad()  # set all weight grads from previous training iters to 0
         out = self.model.forward(x)  # forward the data in the model

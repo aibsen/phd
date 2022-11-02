@@ -40,22 +40,24 @@ class LCs(Dataset):
         print("loading data into memmory")
         try:
             with h5py.File(self.dataset_h5,'r') as f:
-                X = f["X"][:,0:self.n_channels]
+                X = f["X"][:,:,0:self.lc_length]
+                print(X.shape)
                 Y = f["Y"]
                 ids = f["ids"]
                 self.targets = list(Y)
+                # print(self.targets)
                 self.X = torch.tensor(X, device = self.device, dtype=torch.float)
                 self.ids = torch.tensor(ids, device = self.device, dtype=torch.long)
                 self.Y = torch.tensor(Y, device = self.device, dtype=torch.long)
                 self.length = len(self.Y)
                 if 'lens' in f.keys():
                     lens=f['lens']
-                    self.lens=torch.tensor(lens,dtype=torch.int64)
-                    print(self.lens.dtype)
-                print(self.X.shape)
-                print(self.Y.shape)
-                print(self.ids.shape)
-                print(len(set(self.targets)))
+                    self.lens=torch.tensor(lens, device = self.device, dtype=torch.int64)
+                    # print(self.lens.dtype)
+                # print(self.X.shape)
+                # print(self.Y.shape)
+                # print(self.ids.shape)
+                # print(len(set(self.targets)))
         except Exception as e:
             print(e)
 

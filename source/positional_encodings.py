@@ -6,28 +6,46 @@ import math
 
 class PositionalEncoding(nn.Module):
 
-    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
+    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 128, custom_position=False):
         super().__init__()
-        self.dropout = nn.Dropout(p=dropout)
-
-        position = torch.arange(max_len).unsqueeze(1)
+        self.layer_dict = nn.ModuleDict()
+        self.layer_dict['dropout'] = nn.Dropout(p=dropout)
+        self.custom_position = custom_position
         div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
-        pe = torch.zeros(max_len, 1, d_model)
-        pe[:, 0, 0::2] = torch.sin(position * div_term)
-        pe[:, 0, 1::2] = torch.cos(position * div_term)
-        pe = pe.permute(1,0,2)
-        self.register_buffer('pe', pe)
-        # print("PE")
-        # print(pe.shape)
-    
+        self.max_len = max_len
+        self.d_model = d_model
+
+        if not custom_position:
+            position = torch.arange(max_len).unsqueeze(1)
+            
+            # pe = torch.zeros(max_len, 1, d_model)
+            pe = torch.zeros(1,max_len, d_model)
+            pe[0, :, 0::2] = torch.sin(position * div_term)
+            pe[0, :, 1::2] = torch.cos(position * div_term)
+            # pe = pe.permute(1,0,2)
+            self.register_buffer('pe', pe)
+        else:
+            self.register_buffer('div_term',div_term)
 
     def forward(self, x: Tensor) -> Tensor:
         """
         Args:
-            x: Tensor, shape [seq_len, batch_size, embedding_dim]
+            x: Tensor, shape [batch_size, seq_length, embedding_dim]
         """
-        x = x + self.pe[:x.size(0)]
-        return self.dropout(x)
+        if self.custom_position: 
+            #if sequences are not evenly sampled, then the last f_dim represents custom positions
+            positions = x[-1].unsqueeze(-1)
+            x = x[0]
+            l = positions*self.div_term
+            pe = torch.zeros((x.shape[0],self.max_len, self.d_model),device=torch.device('cuda'))
+            pe[:, :, 0::2] = torch.sin(positions * self.div_term)
+            pe[:, :, 1::2] = torch.cos(positions * self.div_term)
+            x = x + pe
+
+        else:
+            x = x + self.pe[:x.size(0)]
+
+        return self.layer_dict['dropout'](x)
     
     def reset_parameters(self):
         pass

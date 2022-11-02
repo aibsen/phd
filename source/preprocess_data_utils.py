@@ -52,28 +52,39 @@ def create_uneven_vectors(data, metadata, n_channels=2,timesteps=128):
     assert((metadata.object_id==new_flux.object_id.unique()).all())
     ids = new_flux.object_id.unique()
     max_length = new_flux.groupby('object_id').object_id.count().max()
-    X = np.full((ids.shape[0],new_flux.passband.unique().shape[0]+2,max_length),-np.inf)
-    # lens = np.zeros((ids.shape[0]))
+    X = np.full((ids.shape[0],new_flux.passband.unique().shape[0]+2,timesteps),0)#not sure why but this is the value they used originally
+    lens = np.zeros((ids.shape[0]))
     for i,id in enumerate(ids):
     
         lc = new_flux[new_flux.object_id==id]
         mag = lc.flux.values
-        mjd = lc.mjd.values
-        passband = lc.passband.values
-        l = mag.shape[0]
-        # lens[i] = l
+        l = mag.shape[0] if mag.shape[0]<128 else 128
+        mag = mag[:l]
+        mjd = lc.mjd.values[:l]
+        passband = lc.passband.values[:l]
+        t0 = mjd.min()
+        tl =mjd.max()
+        l = mag.shape[0] if mag.shape[0]<128 else 128
+        # print(mjd)
+        normalized_mjd = 1 + ((timesteps-1)/(tl-t0))*(mjd-t0)
+        # print(normalized_mjd)
+        # print("")
         X[i,0,0:l] = mag
         pp = np.array([[1,0] if p==0 else [0,1] for p in passband])
         X[i,1:3,0:l] = pp.swapaxes(1,0) 
-        X[i,3,0:l] = mjd
+        X[i,3,0:l] = normalized_mjd
+        lens[i] = l
+        # X[i,3,0:l] = mjd
+        # l = mag.shape[0] if mag.shape[0]<128 else 128
+
         assert((X[i,1,0:l].astype('bool')==~X[i,2,0:l].astype(bool)).all())
 
     #truncate to 1st 128 observations sth like 60-128 days
-    X = X[:,:,0:128]
+    X = X[:,:,0:128] #should already have been truncated?
     # lens = lens[0:128]
     Y = metadata.true_target.values
     assert(X.shape[0]==Y.shape[0] and Y.shape[0]==ids.shape[0])
-    return X, ids, Y
+    return X, ids, Y, lens
 
 def create_interpolated_vectors(data, length, n_channels=2):
 
@@ -412,7 +423,7 @@ def create_gp_interpolated_vectors(
         # print(obj_gps)
 
         obj_gps = pd.pivot_table(obj_gps, index="mjd", columns="passband", values="flux")
-        # print(obj_gps)
+        print(obj_gps)
         X[i,0,:] = obj_gps[0]
         X[i,1,:] = obj_gps[1]
         id_list.append(object_id)
