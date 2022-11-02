@@ -86,7 +86,7 @@ def create_gp_interpolated_vectors(data_fn, meta_fn, output_fn):
     # id_list_short = id_list[:5]
 # sn_short = sn[sn.object_id.isin(id_list_short)]
 
-    X, id_list, tags = preprocess_data_utils.generate_gp_all_objects(id_list,data,metadata,timesteps=128)
+    X, id_list, tags = preprocess_data_utils.create_gp_interpolated_vectors(id_list,data,metadata,timesteps=128)
     flux_to_mag = lambda f: 30-2.5*math.log10(f)
     f = np.vectorize(flux_to_mag)
     X = f(X)
@@ -106,20 +106,21 @@ def create_gp_interpolated_vectors(data_fn, meta_fn, output_fn):
 def create_uneven_vectors(data_fn, meta_fn, output_fn):
     data, metadata = load_data(data_fn, meta_fn)
     # print(data.object_id.unique().shape)
-    X, id_list, tags = preprocess_data_utils.create_uneven_vectors(data, metadata)
+    X, id_list, tags, l = preprocess_data_utils.create_uneven_vectors(data, metadata)
 
     dataset = {
         'X':X,
         'Y':tags,
-        'ids':id_list
+        'ids':id_list,
+        'lens': l
     }
-    
+    print(dataset.keys())
     preprocess_data_utils.save_vectors(dataset,interpolated_data_dir+output_fn)
 
 sn_f = 'simsurvey_sn4_balanced.csv'
 sn_m_f = 'simsurvey_sn4_metadata_balanced.csv'
 
-create_uneven_vectors(sn_f,sn_m_f,' simsurvey_data_balanced_4_mag_uneven.h5')
+create_uneven_vectors(sn_f,sn_m_f,'simsurvey_data_balanced_4_mag_uneven_tnorm.h5')
 # sn = pd.read_csv(sn_f)
 # sn_m = pd.read_csv(sn_m_f)
 # sn_0 = sn[sn.object_id == 2900]
@@ -144,7 +145,7 @@ create_uneven_vectors(sn_f,sn_m_f,' simsurvey_data_balanced_4_mag_uneven.h5')
 # id_list = list(sn.object_id.unique())
 # id_list_short = id_list[:5]
 # sn_short = sn[sn.object_id.isin(id_list_short)]
-# create_gp_interpolated_vectors(sn, sn_m, 'simsurvey_data_balanced_4_mag_gp.h5')
+# create_gp_interpolated_vectors(sn_f, sn_m_f, 'simsurvey_data_balanced_4_mag_gp.h5')
 # create_linearly_interpolated_vectors('simsurvey_sn4_balanced.csv','simsurvey_sn4_metadata_balanced.csv', 'simsurvey_data_balanced_4_mag_linear.h5')
 # df = preprocess_data_utils.generate_gp_all_objects(id_list_short,sn_short,sn_m,timesteps=128)
 # print(df)

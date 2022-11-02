@@ -7,7 +7,7 @@ import torch.nn
 from positional_encodings import PositionalEncoding, TimeFiLMEncoding
 import numpy as np
 
-class TSTransformer(nn.Module):
+class TSTransformerClassifier(nn.Module):
 
     def __init__(self,
         input_features = 4,
@@ -15,20 +15,25 @@ class TSTransformer(nn.Module):
         nhead =1,
         d_hid: int = 150,
         nlayers: int = 1, 
-        dropout: float = 0.2):
+        dropout: float = 0.2,
+        max_len: float = 128,
+        uneven_t: bool = False,
+        num_output_classes = 4):
         super().__init__()
 
         self.layer_dict = nn.ModuleDict()
+        input_features = input_features-1 if uneven_t else input_features
         self.layer_dict['encoder_in'] = nn.Linear(input_features, d_model,bias=False)
-        self.layer_dict['decoder_in'] = nn.Linear(input_features, d_model,bias=False)
-        self.layer_dict['local_encoder_0'] = PositionalEncoding(d_model, dropout,max_len=128)
+        self.layer_dict['positional_encoding'] = PositionalEncoding(d_model, dropout,max_len=max_len, custom_position=uneven_t)
         encoder_layer = nn.TransformerEncoderLayer(d_model, nhead, d_hid, dropout,batch_first=True)
-        self.layer_dict['encoder'] = nn.TransformerEncoder(encoder_layer, nlayers)
-        self.layer_dict['local_encoder_1'] = PositionalEncoding(d_model, dropout,max_len=128)
-        decoder_layer = nn.TransformerDecoderLayer(d_model, nhead, d_hid, dropout,batch_first=True)
-        self.layer_dict['decoder'] = nn.TransformerDecoder(decoder_layer,nlayers)
-        self.layer_dict['local_decoder'] = nn.Linear(d_model, 6)
-
+        norm_layer = nn.LayerNorm(d_model)
+        self.layer_dict['encoder'] = nn.TransformerEncoder(encoder_layer, nlayers, norm=norm_layer)
+        self.layer_dict['local_decoder'] = nn.Linear(d_model, d_model)
+        self.layer_dict['classifier'] = nn.Linear(d_model, num_output_classes)
+        self.layer_dict['dropout'] = nn.Dropout(p=0.5)
+        self.uneven_t = uneven_t
+        self.max_len = max_len
+        self.d_model = d_model
         self.init_weights()
 
     def init_weights(self) -> None:
@@ -36,7 +41,6 @@ class TSTransformer(nn.Module):
             try:
                 item.reset_parameters()
             except Exception as e:
-                # print(e)
                 for p in item.parameters():
                     if p.dim() > 1: 
                         nn.init.xavier_uniform_(p)
@@ -44,53 +48,47 @@ class TSTransformer(nn.Module):
     def reset_parameters(self) -> None:
         self.init_weights()
 
-    def forward(self, src, trg) -> Tensor:
+    def forward(self, src):
+        if self.uneven_t: # seq lengths are different and thus are specified in dataset
+            lens = src[1]
+            src = src[0]
+            src = src.permute(0,2,1)
+            pad_mask = self.pad_mask(src,lens)
+            x = src[:,:,0:-1] 
+
+            t = src[:,:,-1] #last dimensions represent t
+        else:
+            src = src.permute(0,2,1)
+            pad_mask = torch.zeros((src.shape[0],src.shape[1]), device=torch.device('cuda'))
+            x = src
         
-        src_lens = src[1]
-        trg_lens = trg[1]
-
-        src = src[0]
-        trg = trg[0]
-        # print(src.shape)
-        src = self.layer_dict['encoder_in'](src) 
-        # print(src.shape)
-        src = self.layer_dict['local_encoder_0'](src)
-        # print(src.shape)
-
-
-        trg = self.layer_dict['decoder_in'](trg)
-        trg = self.layer_dict['local_encoder_1'](trg)
-    #     trg = self.layer_dict['local_encoder_1'](trg[0])
-    #     # print(src.shape)
+        x = self.layer_dict['encoder_in'](x) #input embedding 
+        x = x if not self.uneven_t else (x,t) 
+        # x = (x,t) if self.uneven_t else x 
+        x = self.layer_dict['positional_encoding'](x) #positional encoding
+        x = self.layer_dict['encoder'](x, src_key_padding_mask=pad_mask)
         
-        src_mask = self.pad_mask(src,src_lens)
-        # print(src_mask.shape)
-    #     # src_trg_mask = self.pad_mask(trg, src)
-    #     trg_mask = self.pad_mask(trg, trg_lens)
-    #     no_peak = self.no_peak_mask(trg)
-    #     # print(trg_mask)
+        if self.uneven_t:
+            i =  lens.view(-1,1,1).long() - 1
+            i = i.repeat(1,1,self.d_model)
 
-    #     # src = src.permute(0,2,1) #bs,length,features
-    #     # trg = trg.permute(0,2,1) #bs,length,features
-        memory = self.layer_dict['encoder'](src, src_key_padding_mask=src_mask)
-        # print(memory.shape)
-        out=self.layer_dict['local_decoder'](memory)
-        # print(out.shape)
-        out = out.view(out.shape[0],out.shape[1]*out.shape[2])
+            torch.set_printoptions(edgeitems=200)
+
+            out = x.gather(1,i) #last representation vector
+        else:
+            out = x[:,-1,:] # if all sequences have the same length, take last element
+        out = out.squeeze()
+        out = F.relu(self.layer_dict['local_decoder'](out))
+        out = self.layer_dict['dropout'](out)
+        out = self.layer_dict['classifier'](out)
         return(out)
-    #     out = self.layer_dict['decoder'](trg, memory, tgt_mask=no_peak,tgt_key_padding_mask=trg_mask)
-    #     # , src_trg_mask) not sure if needed
-
-    #     out = self.layer_dict['local_decoder'](out)
-        
-    #     return out
 
     def pad_mask(self, q, lens_q):
         # print(q)
         len_q = q.size(1)
         mask = torch.zeros((q.shape[0],q.shape[1]),device=torch.device('cuda'))
         for i,l in enumerate(lens_q):
-            mask[i,l:] = 1
+            mask[i,l+1:] = 1
         return mask==1 
 
     # def no_peak_mask(self, s):
