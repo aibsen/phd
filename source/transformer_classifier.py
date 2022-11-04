@@ -113,29 +113,29 @@ class TSTransformerClassifier(nn.Module):
             out = self.layer_dict['classifier'](out)
         
         except Exception as e:
-
+            print("spoelr")
             if self.reduction is None:
                 print("if no reduction is specified, then a custom classifier needs to be \
                     given to fit dimensions")
             
             elif self.reduction == 'last':
                     
-                if self.uneven_t:
-                    i =  lens.view(-1,1,1).long() - 1
-                    i = i.repeat(1,1,self.d_model)
+                # if self.uneven_t:
+                #     i =  lens.view(-1,1,1).long() - 1
+                #     i = i.repeat(1,1,self.d_model)
 
-                    torch.set_printoptions(edgeitems=200)
+                #     torch.set_printoptions(edgeitems=200)
 
-                    out = x.gather(1,i) #last representation vector
-                else:
-                    out = x[:,-1,:] # if all sequences have the same length, take last element
+                #     out = x.gather(1,i) #last representation vector
+                # else:
+                out = x[:,-1,:] # if all sequences have the same length, take last element
             
             elif self.reduction == 'gap':
 
                 # if self.uneven_t:
                 #     out = torch.zeros(x.shape[0],x.shape[2], device=torch.device('cuda'))
                 #     for i in torch.arange(0,x.shape[0]):
-                #         out[i,:] = torch.mean(x[i,:lens[i],:],0)
+                #         out[i,:] = torch.mean(x[i,-lens[i]:,:],0)
                 # else:
                 out = x.permute(0,2,1)
                 out = self.layer_dict['gap'](out)
@@ -157,7 +157,9 @@ class TSTransformerClassifier(nn.Module):
         len_q = q.size(1)
         mask = torch.zeros((q.shape[0],q.shape[1]),device=torch.device('cuda'))
         for i,l in enumerate(lens_q):
-            mask[i,l:] = 1
+            # mask[i,l:] = 1
+            mask[i,0:-l] = 1
+            
         return mask==1 
 
     # def no_peak_mask(self, s):

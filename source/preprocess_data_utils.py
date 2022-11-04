@@ -69,15 +69,21 @@ def create_uneven_vectors(data, metadata, n_channels=2,timesteps=128):
         normalized_mjd = 1 + ((timesteps-1)/(tl-t0))*(mjd-t0)
         # print(normalized_mjd)
         # print("")
-        X[i,0,0:l] = mag
-        pp = np.array([[1,0] if p==0 else [0,1] for p in passband])
-        X[i,1:3,0:l] = pp.swapaxes(1,0) 
-        X[i,3,0:l] = normalized_mjd
-        lens[i] = l
+        # X[i,0,0:l] = mag
+        # pp = np.array([[1,0] if p==0 else [0,1] for p in passband])
+        # X[i,1:3,0:l] = pp.swapaxes(1,0) 
+        # X[i,3,0:l] = normalized_mjd
+        # lens[i] = l
         # X[i,3,0:l] = mjd
         # l = mag.shape[0] if mag.shape[0]<128 else 128
+        X[i,0,-l:] = mag
+        pp = np.array([[1,0] if p==0 else [0,1] for p in passband])
+        X[i,1:3,-l:] = pp.swapaxes(1,0) 
+        X[i,3,-l:] = normalized_mjd
+        lens[i] = l
 
-        assert((X[i,1,0:l].astype('bool')==~X[i,2,0:l].astype(bool)).all())
+
+        assert((X[i,1,-l:].astype('bool')==~X[i,2,-l:].astype(bool)).all())
 
     #truncate to 1st 128 observations sth like 60-128 days
     X = X[:,:,0:128] #should already have been truncated?

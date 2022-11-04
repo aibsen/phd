@@ -11,7 +11,7 @@ import torch
 
 results_dir = "../../results/"
 data_dir = "/home/ai/phd/data/ztf/training/"
-exp_name = "data_rep_exp_5_"
+exp_name = "data_rep_exp_9_"
 
 
 lc_length = 128
@@ -39,7 +39,7 @@ exp_params={
 data_file_template = 'simsurvey_data_balanced_4_mag_'
 data_reps = ['linear','gp','uneven','uneven_tnorm']
 # data_reps = ['uneven','uneven_tnorm']
-data_reps = ['uneven_tnorm_back']
+data_reps = ['linear','gp','uneven_tnorm_back']
 
 for data_rep in data_reps:
 
@@ -65,7 +65,8 @@ for data_rep in data_reps:
 
     # t_sampling = False
 
-    # classifier = torch.nn.Linear(d_model*lc_length,num_classes)
+    classifier = torch.nn.Linear(d_model*lc_length,num_classes)
+    # local_decoder = torch.nn.Linear(d_model,d_model)
     # embedding = ConvolutionalEmbedding(d_model, input_shape[0])
     pos = TimeFiLMEncoding(d_model, max_len=lc_length)
 
@@ -78,9 +79,10 @@ for data_rep in data_reps:
         time_dimension = time_dimension,
         positional_encoding = pos,
         d_model=d_model,
-        # reduction='gap'
+        # reduction='gap',
         # embedding_layer=embedding
-        # classifier=classifier
+        classifier=classifier
+        # local_decoder=local_decoder
         )
 
 
@@ -112,7 +114,10 @@ for data_rep in data_reps:
     #4 gap, conv embedding
     #5linear embedding, fourier pos, last
     #50 mask indices from l instead of l+1
-    #linear emb, fourier, gap
+    #51 again cos seems to work better
+    #6linear emb, fourier, gap
+    #7 conv fourier gap
+    #conv fourier last
 
 
 

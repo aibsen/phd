@@ -54,6 +54,16 @@ def load_data(data_fn, meta_fn):
 
     return data, metadata
 
+def merge_files(file_list, output, data_dir):
+
+    items = []
+
+    for file in file_list:
+        df = pd.read_csv(data_dir+file)
+        items.append(df)
+
+    merged = pd.concat(items, axis=0, ignore_index=True)
+    merged.to_csv(data_dir+output, index=False)
 
 def create_linearly_interpolated_vectors(data_fn, meta_fn, output_fn):
 
@@ -120,7 +130,7 @@ def create_uneven_vectors(data_fn, meta_fn, output_fn):
 sn_f = 'simsurvey_sn4_balanced.csv'
 sn_m_f = 'simsurvey_sn4_metadata_balanced.csv'
 
-create_uneven_vectors(sn_f,sn_m_f,'simsurvey_data_balanced_4_mag_uneven_tnorm.h5')
+# create_uneven_vectors(sn_f,sn_m_f,'simsurvey_data_balanced_4_mag_uneven_tnorm_back.h5')
 # sn = pd.read_csv(sn_f)
 # sn_m = pd.read_csv(sn_m_f)
 # sn_0 = sn[sn.object_id == 2900]
