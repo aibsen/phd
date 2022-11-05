@@ -9,10 +9,11 @@ import torch
 
 results_dir = "../../results/"
 data_dir = "/home/ai/phd/data/ztf/training/"
-exp_name = "data_rep_exp_1_"
+exp_name = "data_rep_exp_2_"
 
 
 lc_length = 128
+d_model = 128
 batch_size = 64
 num_epochs = 100
 use_gpu = True
@@ -34,8 +35,11 @@ exp_params={
 }
 
 data_file_template = 'simsurvey_data_balanced_4_mag_'
+test_data_file_template = 'simsurvey_test_'
 # data_reps = ['linear','gp','uneven','uneven_tnorm']
-data_reps = ['uneven','uneven_tnorm']
+data_reps = ['uneven_tnorm_backl']
+# ,'uneven_tnorm']
+# data_reps = ['uneven','uneven_tnorm']
 
 for data_rep in data_reps:
 
@@ -57,6 +61,9 @@ for data_rep in data_reps:
     # .shape if t_sampling else dataset[0][0].shape
 
     # loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    test_data_file = data_dir+test_data_file_template+'{}.h5'.format(data_rep)
+    test_dataset = LCs(lc_length, test_data_file, packed=t_sampling)
+    test_dataset.load_data_into_memory()
 
 
     # t_sampling = True
@@ -67,7 +74,8 @@ for data_rep in data_reps:
         nhead=4,
         nlayers=1,
         uneven_t=t_sampling,
-        time_dimension=time_dimension)
+        time_dimension=time_dimension,
+        d_model=d_model)
 
     exp_params['network_model'] = nn
     # experiment = Experiment(
@@ -79,10 +87,11 @@ for data_rep in data_reps:
     # )
 
     experiment = SeededExperiment(
-        results_dir+exp_name+data_rep+'11',#2 = no local_encoder, lr 03, #3 lr 04
+        results_dir+exp_name+data_rep+'0',#2 = no local_encoder, lr 03, #3 lr 04
         exp_params = exp_params,#4 lr04 wdc02
         seeds = seeds,#5 unvenen pos
-        train_data=dataset#6 disregar tdim and uneven pos
+        train_data=dataset,#6 disregar tdim and uneven pos
+        test_data = test_dataset
     )#7,6 but with gather
     #8,7 but correct padding
     #9, 8 but without t dim

@@ -39,7 +39,7 @@ class CVExperiment(nn.Module):
         self.test_data = test_data
         self.best_val_fold = None
         self.best_fold = None
-        # self.batch_size = self.exp_params['batch_size']
+        self.batch_size = self.exp_params['batch_size']
         self.mean_best_epoch = None
         
         if train_data:
@@ -67,8 +67,8 @@ class CVExperiment(nn.Module):
             self.mean_best_epoch = int(stats_df.iloc[0]['mean_epoch'])
         stats_df.to_csv(self.experiment_logs+"/"+summary_file,index=False)
 
-    def run_experiment(self, test_data_name="test"):
-        if self.train_data:
+    def run_experiment(self, final_only=False,test_data_name="test"):
+        if self.train_data and not final_only:
             self.run_train_phase()
         if self.train_data and self.test_data:
             self.run_final_train_phase()

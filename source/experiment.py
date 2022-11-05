@@ -202,9 +202,10 @@ class Experiment(nn.Module):
         print(self.num_output_classes)
         start_time = time.time()
         n_epochs = n_epochs if n_epochs else self.best_epoch
+        n_epochs = int(n_epochs)
         data_loaders = data_loaders if data_loaders else [self.train_data,self.val_data]
         self.model.reset_parameters()
-        train_stats = torch.full((n_epochs+1,6),-1, dtype=torch.float, device=self.device) # holds epoch, acc, loss, f1, precission, recall, per train epoch
+        train_stats = torch.full((int(n_epochs+1),6),-1, dtype=torch.float, device=self.device) # holds epoch, acc, loss, f1, precission, recall, per train epoch
 
         n_batches = sum([len(data) for data in data_loaders])
         data_length = sum([len(data.dataset) for data in data_loaders])

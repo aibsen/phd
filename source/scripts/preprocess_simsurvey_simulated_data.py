@@ -13,10 +13,13 @@ import preprocess_data_utils
 import plot_utils
 from utils import simsurvey_ztf_type_dict
 
-runs = 10
+runs = 4
 mag_cut = 19
 csv_data_dir = '../../data/ztf/csv/simsurvey/'
 interpolated_data_dir = '../../data/ztf/training/linearly_interpolated/'
+
+
+
 
 # (r=0, g=1)
 def filter_types(): #use SNe-Ia (0), Ib/c(2), II(1) and SLSNe(3) only
@@ -54,16 +57,53 @@ def load_data(data_fn, meta_fn):
 
     return data, metadata
 
-def merge_files(file_list, output, data_dir):
 
-    items = []
+simsurvey_ztf_type_dict_4 = {
+    '0':'Ia',
+    '1':'IIP', 
+    '2':'Ibc',
+    '3':'SLSN',
+    '4':'IIn'
+}
 
-    for file in file_list:
-        df = pd.read_csv(data_dir+file)
-        items.append(df)
+def merge_files():
+    datas = []
+    metadatas = []
 
-    merged = pd.concat(items, axis=0, ignore_index=True)
-    merged.to_csv(data_dir+output, index=False)
+    for run_code in range(runs):
+        print(run_code)
+        print("")
+        for k, type_name in simsurvey_ztf_type_dict_4.items():
+            
+            data_fn = csv_data_dir+"lcs_{}_test_{}.csv".format(type_name,run_code)
+            data = pd.read_csv(data_fn)
+
+            metadata_fn = csv_data_dir+"meta_{}_test_{}.csv".format(type_name,run_code)
+            metadata = pd.read_csv(metadata_fn)
+
+            print(type_name)
+            print(metadata.shape)
+            print("")
+    
+            # print(metadata)
+
+            true_target = int(k) if int(k)<4 else 1 #IIP and IIn are clumped into one class
+            metadata['true_target'] = np.full(metadata.shape[0],true_target)
+            datas.append(data)
+            metadatas.append(metadata)
+        print("")
+
+    simsurvey_lcs = pd.concat(datas, axis=0, ignore_index=True)
+    simsurvey_meta = pd.concat(metadatas, axis=0, ignore_index=True)
+    print(simsurvey_meta.shape)
+    print(simsurvey_meta.object_id.unique().shape)
+    print(simsurvey_lcs.shape)
+    print(simsurvey_lcs.object_id.unique().shape)
+
+    simsurvey_lcs.to_csv(csv_data_dir+"simsurvey_lcs_test.csv",index=False)
+    simsurvey_meta.to_csv(csv_data_dir+"simsurvey_metadata_test.csv",index=False)
+
+
 
 def create_linearly_interpolated_vectors(data_fn, meta_fn, output_fn):
 
@@ -125,37 +165,45 @@ def create_uneven_vectors(data_fn, meta_fn, output_fn):
         'lens': l
     }
     print(dataset.keys())
+    print(X)
+    x = X[0]
+    print(id_list[0])
+    print(tags[0])
+    print(l[0])
+    print(x)
+    # r = np.where(x[1]==1,x)
+    # print(r)
+    plt.figure()
+    plt.scatter(x[-1],x[0])
+    plt.gca().invert_yaxis()
+    plt.show()
+
     preprocess_data_utils.save_vectors(dataset,interpolated_data_dir+output_fn)
 
-sn_f = 'simsurvey_sn4_balanced.csv'
-sn_m_f = 'simsurvey_sn4_metadata_balanced.csv'
+# merge_files()
 
-# create_uneven_vectors(sn_f,sn_m_f,'simsurvey_data_balanced_4_mag_uneven_tnorm_back.h5')
-# sn = pd.read_csv(sn_f)
-# sn_m = pd.read_csv(sn_m_f)
-# sn_0 = sn[sn.object_id == 2900]
-# print(sn_0)
+# sn_f = 'simsurvey_sn4_balanced.csv'
+# sn_m_f = 'simsurvey_sn4_metadata_balanced.csv'
 
-
-# x = preprocess_data_utils.generate_gp_single_event(sn_0,timesteps=64)
-# print(x)
-
-# plot_utils.plot_raw_and_interpolated_lcs(sn_0,x)
-
-# flux_to_mag = lambda f: 30-2.5*math.log10(f)
-# fluxerr_to_sigmag = lambda ferr,f: np.sqrt(np.abs(2.5/math.log(10)*(ferr/f)))
-# x = x[x.flux>0]
-# x['magpsf'] = [flux_to_mag(f) for f in x.flux]
-# x['sigmagpsf'] = [fluxerr_to_sigmag(f_err,f) for f,f_err in zip(x.flux,x.flux_err)]
+sn_f = 'simsurvey_lcs_test.csv'
+sn_m_f = 'simsurvey_metadata_test.csv'
 
 
-# plot_utils.plot_raw_and_interpolated_lcs(sn_0,x,units='mag')
-
-
-# id_list = list(sn.object_id.unique())
-# id_list_short = id_list[:5]
-# sn_short = sn[sn.object_id.isin(id_list_short)]
-# create_gp_interpolated_vectors(sn_f, sn_m_f, 'simsurvey_data_balanced_4_mag_gp.h5')
-# create_linearly_interpolated_vectors('simsurvey_sn4_balanced.csv','simsurvey_sn4_metadata_balanced.csv', 'simsurvey_data_balanced_4_mag_linear.h5')
+create_uneven_vectors(sn_f,sn_m_f,'simsurvey_data_balanced_mag_unven_tnorm_backl.h5')
+create_uneven_vectors(sn_f,sn_m_f,'simsurvey_test_uneven_tnorm_backl.h5')
+# create_gp_interpolated_vectors(sn_f, sn_m_f, 'simsurvey_test_gp.h5')
+# create_linearly_interpolated_vectors(sn_f, sn_m_f, 'simsurvey_test_linear.h5')
 # df = preprocess_data_utils.generate_gp_all_objects(id_list_short,sn_short,sn_m,timesteps=128)
 # print(df)
+
+
+# def sanity_check():
+#     data_fn = csv_data_dir+"simsurvey_lcs_20.csv"
+#     metadata_fn = csv_data_dir+"simsurvey_metadata_20.csv"
+
+#     data = pd.read_csv(data_fn)
+#     metadata = pd.read_csv(metadata_fn)
+
+#     print((data.object_id.unique() == metadata.object_id.unique()).all())
+#     print(data.object_id.unique().shape == metadata.object_id.unique().shape)
+#     print(data.object_id.unique().shape)

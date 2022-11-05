@@ -44,7 +44,7 @@ def create_uneven_vectors(data, metadata, n_channels=2,timesteps=128):
     new_flux['sigmagpsf'] = [fluxerr_to_sigmag(ferr, f) for ferr,f in zip(new_flux.flux_weight.values, new_flux.flux_err.values)]
 
     #standarize 
-    new_flux['magpsf'] = (new_flux.magpsf - np.mean(new_flux.magpsf.values)/np.std(new_flux.magpsf.values))
+    # new_flux['magpsf'] = (new_flux.magpsf - np.mean(new_flux.magpsf.values)/np.std(new_flux.magpsf.values))
     new_flux = new_flux.sort_values(by=['object_id','mjd'])
     
     #finally put vectors together
@@ -57,7 +57,7 @@ def create_uneven_vectors(data, metadata, n_channels=2,timesteps=128):
     for i,id in enumerate(ids):
     
         lc = new_flux[new_flux.object_id==id]
-        mag = lc.flux.values
+        mag = lc.magpsf.values
         l = mag.shape[0] if mag.shape[0]<128 else 128
         mag = mag[:l]
         mjd = lc.mjd.values[:l]
@@ -66,7 +66,8 @@ def create_uneven_vectors(data, metadata, n_channels=2,timesteps=128):
         tl =mjd.max()
         l = mag.shape[0] if mag.shape[0]<128 else 128
         # print(mjd)
-        normalized_mjd = 1 + ((timesteps-1)/(tl-t0))*(mjd-t0)
+        normalized_mjd = ((l-1)*(mjd-t0))/(tl-t0)
+        # normalized_mjd = ((timesteps-1)*(mjd-t0))/(tl-t0))
         # print(normalized_mjd)
         # print("")
         # X[i,0,0:l] = mag

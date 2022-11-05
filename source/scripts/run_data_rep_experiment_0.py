@@ -15,7 +15,7 @@ exp_name = "data_rep_exp_9_"
 
 
 lc_length = 128
-d_model = 120
+d_model = 128
 batch_size = 64
 num_epochs = 100
 use_gpu = True
@@ -37,9 +37,11 @@ exp_params={
 }
 
 data_file_template = 'simsurvey_data_balanced_4_mag_'
+test_data_file_template = 'simsurvey_test_'
 data_reps = ['linear','gp','uneven','uneven_tnorm']
 # data_reps = ['uneven','uneven_tnorm']
-data_reps = ['linear','gp','uneven_tnorm_back']
+# data_reps = ['linear','gp','uneven_tnorm_back']
+data_reps = ['uneven_tnorm_backl']
 
 for data_rep in data_reps:
 
@@ -61,13 +63,16 @@ for data_rep in data_reps:
     # .shape if t_sampling else dataset[0][0].shape
 
     # loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    test_data_file = data_dir+test_data_file_template+'{}.h5'.format(data_rep)
+    test_dataset = LCs(lc_length, test_data_file, packed=t_sampling)
+    test_dataset.load_data_into_memory()
 
 
     # t_sampling = False
 
     classifier = torch.nn.Linear(d_model*lc_length,num_classes)
-    # local_decoder = torch.nn.Linear(d_model,d_model)
-    # embedding = ConvolutionalEmbedding(d_model, input_shape[0])
+    local_decoder = torch.nn.Linear(d_model,d_model)
+    embedding = ConvolutionalEmbedding(d_model, input_shape[0])
     pos = TimeFiLMEncoding(d_model, max_len=lc_length)
 
 
@@ -81,7 +86,7 @@ for data_rep in data_reps:
         d_model=d_model,
         # reduction='gap',
         # embedding_layer=embedding
-        classifier=classifier
+        classifier=classifier,
         # local_decoder=local_decoder
         )
 
@@ -99,7 +104,8 @@ for data_rep in data_reps:
         results_dir+exp_name+data_rep,
         exp_params = exp_params,
         seeds = seeds,
-        train_data=dataset
+        train_data=dataset,
+        test_data=test_dataset
     )
 
     experiment.run_experiment()
@@ -117,7 +123,7 @@ for data_rep in data_reps:
     #51 again cos seems to work better
     #6linear emb, fourier, gap
     #7 conv fourier gap
-    #conv fourier last
-
+    #8conv fourier last
+    #9 linear, fourier, none 
 
 

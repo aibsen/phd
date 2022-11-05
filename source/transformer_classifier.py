@@ -113,7 +113,6 @@ class TSTransformerClassifier(nn.Module):
             out = self.layer_dict['classifier'](out)
         
         except Exception as e:
-            print("spoelr")
             if self.reduction is None:
                 print("if no reduction is specified, then a custom classifier needs to be \
                     given to fit dimensions")
