@@ -313,7 +313,7 @@ def draw_cm(ax,target, prediction, normalized=True, colormap=None, names=plastic
     if colormap is not None:
         im = ax.imshow(cm, interpolation= 'nearest', cmap=colormap)
     else : 
-        im = ax.imshow(cm, interpolation= 'nearest', cmap=plt.cm.Oranges)
+        im = ax.imshow(cm, interpolation= 'nearest', cmap=plt.cm.Purples)
     fmt ='.2f'
     thresh = cm.max() / 2.
     for i in range(cm.shape[0]):

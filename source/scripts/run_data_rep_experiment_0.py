@@ -38,77 +38,78 @@ exp_params={
 
 data_file_template = 'simsurvey_data_balanced_4_mag_'
 test_data_file_template = 'simsurvey_test_'
-data_reps = ['linear','gp','uneven','uneven_tnorm']
-# data_reps = ['uneven','uneven_tnorm']
-# data_reps = ['linear','gp','uneven_tnorm_back']
-data_reps = ['uneven_tnorm_backl']
+data_reps = ['linear','gp','uneven','uneven']
 
+embeddings = ['default', 'conv']
+pos_encodings = ['default', 'fourier']
+local_decoders = ['none', 'linear']
+final_pools = ['last','gap','none']
+
+#a fuck ton of exps
 for data_rep in data_reps:
+    
+    i = 0
 
-    t_sampling = True if 'uneven' in data_rep else False
-    time_dimension = True if 'uneven' in data_rep else False
-
+    #load_datasets
     data_file=data_dir+data_file_template+'{}.h5'.format(data_rep)
     dataset = LCs(lc_length, data_file, packed=t_sampling)
     dataset.load_data_into_memory()
-    # print(dataset.lens)
-    # print(dataset[0])
-    # print(dataset[0][0] is tuple)
+
     if type(dataset[0][0]) is tuple:
         input_shape = dataset[0][0][0].shape
     else:
         input_shape = dataset[0][0].shape
 
-    print(input_shape)
-    # .shape if t_sampling else dataset[0][0].shape
-
-    # loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
     test_data_file = data_dir+test_data_file_template+'{}.h5'.format(data_rep)
     test_dataset = LCs(lc_length, test_data_file, packed=t_sampling)
     test_dataset.load_data_into_memory()
 
+    t_sampling = True if 'uneven' in data_rep else False
+    time_dimension = True if 'uneven' in data_rep else False
 
-    # t_sampling = False
+    for emb in embeddings:
+        for pos_enc in pos_encodings:
+            for ld in local_decoders:
+                for pool in final_pools:
 
-    classifier = torch.nn.Linear(d_model*lc_length,num_classes)
-    local_decoder = torch.nn.Linear(d_model,d_model)
-    embedding = ConvolutionalEmbedding(d_model, input_shape[0])
-    pos = TimeFiLMEncoding(d_model, max_len=lc_length)
+                    print("running experiment {} for {} data rep ...".format(i, data_rep)) 
+
+                    embedding = None if emb == 'default' else ConvolutionalEmbedding(d_model, input_shape[0])
+                    pos = None if pos_enc == 'default' else TimeFiLMEncoding(d_model, max_len=lc_length)
+                    local_decoder = None if ld == 'none' else torch.nn.Linear(d_model,d_model)
+                    classifier = torch.nn.Linear(d_model*lc_length,num_classes) if pool == 'none' else None
+
+                    nn = TSTransformerClassifier(input_features=input_shape[0], 
+                        max_len=lc_length, 
+                        nhead=4,
+                        nlayers=1,
+                        uneven_t=t_sampling,
+                        time_dimension = time_dimension,
+                        d_model=d_model,
+                        embedding_layer=embedding,
+                        positional_encoding = pos,
+                        local_decoder=local_decoder
+                        classifier=classifier,
+                        reduction=pool
+                        )
 
 
-    nn = TSTransformerClassifier(input_features=input_shape[0], 
-        max_len=lc_length, 
-        nhead=4,
-        nlayers=1,
-        uneven_t=t_sampling,
-        time_dimension = time_dimension,
-        positional_encoding = pos,
-        d_model=d_model,
-        # reduction='gap',
-        # embedding_layer=embedding
-        classifier=classifier,
-        # local_decoder=local_decoder
-        )
+                    exp_params['network_model'] = nn
+
+                    experiment = SeededExperiment(
+                        results_dir+exp_name+data_rep,
+                        exp_params = exp_params,
+                        seeds = seeds,
+                        train_data=dataset,
+                        test_data=test_dataset
+                    )
+
+                    experiment.run_experiment()
+                    
+                    i+=1
 
 
-    exp_params['network_model'] = nn
-    # experiment = Experiment(
-    #     nn,
-    #     experiment_name=exp_name,
-    #     num_epochs=num_epochs,
-    #     train_data=dataset,
-    #     val_data=dataset #trivial case to check if things work
-    # )
 
-    experiment = SeededExperiment(
-        results_dir+exp_name+data_rep,
-        exp_params = exp_params,
-        seeds = seeds,
-        train_data=dataset,
-        test_data=test_dataset
-    )
-
-    experiment.run_experiment()
     #2 last layer uses all zs
     #20 same but with local decoder 
     #3 last layer is gap
