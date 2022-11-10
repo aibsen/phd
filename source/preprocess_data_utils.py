@@ -18,30 +18,33 @@ ZTF_PB_WAVELENGTHS = {
     "0": 6436.92,
 }
 
-def create_uneven_vectors(data, metadata, n_channels=2,timesteps=128):
+def create_uneven_vectors(data, metadata, n_channels=2,timesteps=128, mag=False):
     #in mjd, 12 hrs = 0.5
     max_dt = 0.5
 
+    data = data.sort_values(by=['object_id','mjd'])
     data['diff'] = data.groupby(["object_id",'passband'])["mjd"].diff().fillna(1) #the first element of each group counts as observation start
     data["gt"] = data['diff'].gt(max_dt)
     data = data.sort_values(by=['object_id', 'passband','mjd'])
     data['group'] = data['gt'].cumsum()
 
-    data['e_log_error'] = np.exp(-np.log(data.flux_err))
-    cum_err_by_group = data.groupby('group').e_log_error.sum()
-    cum_err_by_group = dict(zip(cum_err_by_group.index,cum_err_by_group.values))
-    data['cum_err'] = data.group.map(cum_err_by_group)
-    data['weights'] = data.e_log_error/data.cum_err
-    data['flux_weight'] = data.flux * data.weights
+    if not mag: 
+        data['e_log_error'] = np.exp(-np.log(data.flux_err))
+        cum_err_by_group = data.groupby('group').e_log_error.sum()
+        cum_err_by_group = dict(zip(cum_err_by_group.index,cum_err_by_group.values))
+        data['cum_err'] = data.group.map(cum_err_by_group)
+        data['weights'] = data.e_log_error/data.cum_err
+        data['flux_weight'] = data.flux * data.weights
 
     new_flux = data.groupby('group').mean()
     metadata = metadata.sort_values(by='object_id')
+    
+    if not mag:
+        flux_to_mag = lambda f: 30-2.5*math.log10(f)
+        fluxerr_to_sigmag = lambda ferr,f: np.sqrt(np.abs(2.5/math.log(10)*(ferr/f)))
 
-    flux_to_mag = lambda f: 30-2.5*math.log10(f)
-    fluxerr_to_sigmag = lambda ferr,f: np.sqrt(np.abs(2.5/math.log(10)*(ferr/f)))
-
-    new_flux['magpsf'] = [flux_to_mag(f) for f in new_flux.flux_weight.values]
-    new_flux['sigmagpsf'] = [fluxerr_to_sigmag(ferr, f) for ferr,f in zip(new_flux.flux_weight.values, new_flux.flux_err.values)]
+        new_flux['magpsf'] = [flux_to_mag(f) for f in new_flux.flux_weight.values]
+        new_flux['sigmagpsf'] = [fluxerr_to_sigmag(ferr, f) for ferr,f in zip(new_flux.flux_weight.values, new_flux.flux_err.values)]
 
     #standarize 
     # new_flux['magpsf'] = (new_flux.magpsf - np.mean(new_flux.magpsf.values)/np.std(new_flux.magpsf.values))
@@ -136,7 +139,6 @@ def create_interpolated_vectors(data, length, n_channels=2):
     # sanity check
     assert(unstack.shape[0]== data_cp.object_id.unique().size*n_channels)
     # return
-
     # #transform above info into numpy arrays
     time_uns = unstack['scaled_time'].values[..., np.newaxis]
     # print(time_uns)
@@ -144,6 +146,8 @@ def create_interpolated_vectors(data, length, n_channels=2):
     time_flux = np.concatenate((time_uns, flux_uns), axis =2)
     #create a mask to get points that are valid (not nan)
     #do this for time dim only, since fluxes will be nan when times are also
+    print(time_flux.shape)
+    print('just above')
     nan_masks = ~np.isnan(time_flux)[:, :, 0]
     x = np.arange(length)
     n_lcs = time_flux.shape[0]
@@ -158,7 +162,10 @@ def create_interpolated_vectors(data, length, n_channels=2):
     # print(X.shape)
     n_objs = int(n_lcs/n_channels)
     #reshape vectors so the ones belonging to the same object are grouped into 6 channels
+    print(X[0])
+    print(X[1])
     X_per_band = X.reshape((n_objs,n_channels,length)).astype(np.float32)
+    print(X_per_band[0])
     # print(X_per_band.shape)
 
     # print(unstack.index)

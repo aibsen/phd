@@ -8,10 +8,12 @@ from seeded_experiment import SeededExperiment
 from transformer_classifier import TSTransformerClassifier
 from positional_encodings import ConvolutionalEmbedding, TimeFiLMEncoding
 import torch
+from analyze_simsurvey_test_results import *
+
 
 results_dir = "../../results/"
 data_dir = "/home/ai/phd/data/ztf/training/"
-exp_name = "data_rep_exp_9_"
+exp_name = "data_rep_exp_"
 
 
 lc_length = 128
@@ -36,41 +38,43 @@ exp_params={
     "validation_step":3
 }
 
-data_file_template = 'simsurvey_data_balanced_4_mag_'
-test_data_file_template = 'simsurvey_test_'
-data_reps = ['linear','gp','uneven','uneven']
+test_data_file_template = 'real_test_'
+
+data_reps = ['linear']
 
 embeddings = ['default', 'conv']
 pos_encodings = ['default', 'fourier']
 local_decoders = ['none', 'linear']
 final_pools = ['last','gap','none']
 
-#a fuck ton of exps
 for data_rep in data_reps:
     
-    i = 0
+    i=0
+    
+    t_sampling = True if 'uneven' in data_rep else False
+    t_sampling = True
+    time_dimension = True if 'uneven' in data_rep else False
 
-    #load_datasets
-    data_file=data_dir+data_file_template+'{}.h5'.format(data_rep)
-    dataset = LCs(lc_length, data_file, packed=t_sampling)
-    dataset.load_data_into_memory()
-
-    if type(dataset[0][0]) is tuple:
-        input_shape = dataset[0][0][0].shape
-    else:
-        input_shape = dataset[0][0].shape
-
-    test_data_file = data_dir+test_data_file_template+'{}.h5'.format(data_rep)
+    test_data_file = data_dir+test_data_file_template+'{}_3pb_30obsd_careful.h5'.format(data_rep)
     test_dataset = LCs(lc_length, test_data_file, packed=t_sampling)
     test_dataset.load_data_into_memory()
 
-    t_sampling = True if 'uneven' in data_rep else False
-    time_dimension = True if 'uneven' in data_rep else False
+    # print(test_dataset.X[0])
+    if type(test_dataset[0][0]) is tuple:
+        input_shape = test_dataset[0][0][0].shape
+    else:
+        input_shape = test_dataset[0][0].shape
+
+    print(input_shape)
+
 
     for emb in embeddings:
         for pos_enc in pos_encodings:
             for ld in local_decoders:
                 for pool in final_pools:
+
+                    if pool == 'gap' and ld == 'linear':
+                        continue
 
                     print("running experiment {} for {} data rep ...".format(i, data_rep)) 
 
@@ -88,7 +92,7 @@ for data_rep in data_reps:
                         d_model=d_model,
                         embedding_layer=embedding,
                         positional_encoding = pos,
-                        local_decoder=local_decoder
+                        local_decoder=local_decoder,
                         classifier=classifier,
                         reduction=pool
                         )
@@ -96,35 +100,31 @@ for data_rep in data_reps:
 
                     exp_params['network_model'] = nn
 
+                    exp = results_dir+exp_name+data_rep+'_'+str(i)
+
                     experiment = SeededExperiment(
-                        results_dir+exp_name+data_rep,
+                        exp,
                         exp_params = exp_params,
                         seeds = seeds,
-                        train_data=dataset,
                         test_data=test_dataset
                     )
 
-                    experiment.run_experiment()
-                    
+                    experiment.run_experiment(test_data_name='test_real_30days_3pb_careful')
+
                     i+=1
 
+                    del nn
+                    del experiment
+
+                    torch.cuda.empty_cache()
+
+                    where = exp+'/seed_1772670'
+                    plot_cm(where+'/result_outputs/',
+                        'test_real_30days_3pb_careful_results.csv',
+                        where+'/result_outputs/test_real_30days_3pb_cm_careful.png')
 
 
-    #2 last layer uses all zs
-    #20 same but with local decoder 
-    #3 last layer is gap
-    #30 last layer is gap, but maybe there was a mistake
-    #31 for uneven considers correct lengths for pooling
-    #32 for uneven considers correct lengths for pooling, maybe there was a mistake
-    #33 for uneven regular pooling, x completitud
-    #34 added t_dim for uneven regular pooling, x completitud 2, why did it drop from 3-30?
-    #4 gap, conv embedding
-    #5linear embedding, fourier pos, last
-    #50 mask indices from l instead of l+1
-    #51 again cos seems to work better
-    #6linear emb, fourier, gap
-    #7 conv fourier gap
-    #8conv fourier last
-    #9 linear, fourier, none 
+    del test_dataset
 
+    torch.cuda.empty_cache()
 

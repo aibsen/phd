@@ -48,14 +48,14 @@ def plot_cm(where,csv_results="test_results.csv",output_fname="test_cm.png"):
     cm = plot_utils.plot_cm(targets,predictions,save=True, output_file=output_fname,names=names,normalized=True)
     return cm
 
-data_reps = ['linear', 'gp', 'uneven_tnorm_backl']
-codes=[3,4,5,6,7,8,9]
-for exp_code in codes:
-    for rep in data_reps:
-        exp_name = results_dir+'data_rep_exp_{}_{}/seed_1772670'.format(exp_code,rep)
-        plot_all_cm_cv(folds=5,results_dir=exp_name)
-        plot_cm(exp_name+'/result_outputs/',"test_results.csv",exp_name+'/result_outputs/test_cm.png')
-        plot_best_val_cm_cv(exp_name)
+# data_reps = ['linear', 'gp', 'uneven_tnorm_backl']
+# codes=[3,4,5,6,7,8,9]
+# for exp_code in codes:
+#     for rep in data_reps:
+#         exp_name = results_dir+'data_rep_exp_{}_{}/seed_1772670'.format(exp_code,rep)
+#         plot_all_cm_cv(folds=5,results_dir=exp_name)
+#         plot_cm(exp_name+'/result_outputs/',"test_results.csv",exp_name+'/result_outputs/test_cm.png')
+#         plot_best_val_cm_cv(exp_name)
 
 
 # def compare_cms(exp_names,names,classes,output_name):

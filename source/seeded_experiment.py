@@ -77,7 +77,7 @@ class SeededExperiment(nn.Module):
         
         stats_df.to_csv(self.experiment_logs+"/"+summary_file, index=False)
 
-    def run_experiment(self, final_only=False):
+    def run_experiment(self, final_only=False, test_data_name='test'):
         start_time = time.time()
 
         for seed in self.seeds:
@@ -91,14 +91,18 @@ class SeededExperiment(nn.Module):
                 self.test_data,
                 k=self.k,
                 seed=seed)
-            experiment.run_experiment(final_only)
+            experiment.run_experiment(final_only, test_data_name)
 
-        if self.train_data:
+        if self.train_data and not final_only and self.test_data:
             self.save_seed_statistics("validation_summary.csv")
+            self.save_seed_statistics("final_training_summary.csv")
+
+        
+        elif self.train_data and final_only:
+            self.save_seed_statistics("final_training_summary.csv")
 
         if self.test_data:
-            self.save_seed_statistics("test_summary.csv")
-            self.save_seed_statistics("final_training_summary.csv")
+            self.save_seed_statistics(test_data_name+"_summary.csv")
 
         if self.verbose:
             print("--- %s seconds ---" % (time.time() - start_time))

@@ -66,6 +66,8 @@ simsurvey_ztf_type_dict_4 = {
     '4':'IIn'
 }
 
+
+
 def merge_files():
     datas = []
     metadatas = []
@@ -178,19 +180,19 @@ def create_uneven_vectors(data_fn, meta_fn, output_fn):
     plt.gca().invert_yaxis()
     plt.show()
 
-    preprocess_data_utils.save_vectors(dataset,interpolated_data_dir+output_fn)
+    # preprocess_data_utils.save_vectors(dataset,interpolated_data_dir+output_fn)
 
 # merge_files()
 
-# sn_f = 'simsurvey_sn4_balanced.csv'
-# sn_m_f = 'simsurvey_sn4_metadata_balanced.csv'
+sn_f = 'simsurvey_sn4_balanced.csv'
+sn_m_f = 'simsurvey_sn4_metadata_balanced.csv'
 
-sn_f = 'simsurvey_lcs_test.csv'
-sn_m_f = 'simsurvey_metadata_test.csv'
+# sn_f = 'simsurvey_lcs_test.csv'
+# sn_m_f = 'simsurvey_metadata_test.csv'
 
 
-create_uneven_vectors(sn_f,sn_m_f,'simsurvey_data_balanced_mag_unven_tnorm_backl.h5')
-create_uneven_vectors(sn_f,sn_m_f,'simsurvey_test_uneven_tnorm_backl.h5')
+create_uneven_vectors(sn_f,sn_m_f,'simsurvey_data_balanced_4_mag_uneven.h5')
+# create_uneven_vectors(sn_f,sn_m_f,'simsurvey_test_uneven_tnorm_backl.h5')
 # create_gp_interpolated_vectors(sn_f, sn_m_f, 'simsurvey_test_gp.h5')
 # create_linearly_interpolated_vectors(sn_f, sn_m_f, 'simsurvey_test_linear.h5')
 # df = preprocess_data_utils.generate_gp_all_objects(id_list_short,sn_short,sn_m,timesteps=128)
