@@ -41,7 +41,9 @@ exp_params={
 
 data_file_template = 'simsurvey_data_balanced_4_mag_'
 test_data_file_template = 'simsurvey_test_'
-data_reps = ['linear','gp','uneven']
+# data_reps = ['linear','gp','uneven']
+data_reps = ['gp_careful']
+# ,'gp','uneven']
 
 embeddings = ['default', 'conv']
 pos_encodings = ['default', 'fourier']
@@ -52,8 +54,9 @@ final_pools = ['last','gap','none']
 for data_rep in data_reps:
     
     i = 0
-    t_sampling = True if 'uneven' in data_rep else False
+    # t_sampling = True if 'uneven' in data_rep else False
     time_dimension = True if 'uneven' in data_rep else False
+    t_sampling=True
     #load_datasets
     data_file=data_dir+data_file_template+'{}.h5'.format(data_rep)
     dataset = LCs(lc_length, data_file, packed=t_sampling)

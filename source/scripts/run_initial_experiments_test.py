@@ -40,7 +40,7 @@ exp_params={
 
 test_data_file_template = 'real_test_'
 
-data_reps = ['linear']
+data_reps = ['gp_careful']
 
 embeddings = ['default', 'conv']
 pos_encodings = ['default', 'fourier']
@@ -55,7 +55,7 @@ for data_rep in data_reps:
     t_sampling = True
     time_dimension = True if 'uneven' in data_rep else False
 
-    test_data_file = data_dir+test_data_file_template+'{}_3pb_30obsd_careful.h5'.format(data_rep)
+    test_data_file = data_dir+test_data_file_template+'{}_3pb_30obsd.h5'.format(data_rep)
     test_dataset = LCs(lc_length, test_data_file, packed=t_sampling)
     test_dataset.load_data_into_memory()
 
@@ -109,7 +109,7 @@ for data_rep in data_reps:
                         test_data=test_dataset
                     )
 
-                    experiment.run_experiment(test_data_name='test_real_30days_3pb_careful')
+                    experiment.run_experiment(test_data_name='test_real_30days_3pb')
 
                     i+=1
 
@@ -120,8 +120,8 @@ for data_rep in data_reps:
 
                     where = exp+'/seed_1772670'
                     plot_cm(where+'/result_outputs/',
-                        'test_real_30days_3pb_careful_results.csv',
-                        where+'/result_outputs/test_real_30days_3pb_cm_careful.png')
+                        'test_real_30days_3pb_results.csv',
+                        where+'/result_outputs/test_real_30days_3pb_cm.png')
 
 
     del test_dataset
