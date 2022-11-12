@@ -131,17 +131,18 @@ def create_linearly_interpolated_vectors(data_fn, meta_fn, output_fn):
 
     preprocess_data_utils.save_vectors(dataset,interpolated_data_dir+output_fn)
 
-def create_gp_interpolated_vectors(data_fn, meta_fn, output_fn):
+def create_gp_interpolated_vectors(data_fn, meta_fn, output_fn, careful=True):
 
     data, metadata = load_data(data_fn, meta_fn)
     id_list = list(data.object_id.unique())
     # id_list_short = id_list[:5]
 # sn_short = sn[sn.object_id.isin(id_list_short)]
 
-    X, id_list, tags = preprocess_data_utils.create_gp_interpolated_vectors(id_list,data,metadata,timesteps=128)
-    flux_to_mag = lambda f: 30-2.5*math.log10(f)
+    X, id_list, tags, lens = preprocess_data_utils.create_gp_interpolated_vectors(id_list,data,metadata,timesteps=128,var_length=careful)
+    flux_to_mag = lambda f: 30-2.5*math.log10(f) if f!= 1 else 0.0
     f = np.vectorize(flux_to_mag)
     X = f(X)
+    print(X[0:10])
 
     dataset = {
         'X':X,
@@ -149,11 +150,16 @@ def create_gp_interpolated_vectors(data_fn, meta_fn, output_fn):
         'ids':id_list
     }
 
+    if careful:
+        dataset['lens'] = lens
+
     preprocess_data_utils.save_vectors(dataset,interpolated_data_dir+output_fn)
     # fluxerr_to_sigmag = lambda ferr,f: np.sqrt(np.abs(2.5/math.log(10)*(ferr/f)))
     # x = x[x.flux>0]
     # x['magpsf'] = [flux_to_mag(f) for f in x.flux]
     # x['sigmagpsf'] = [fluxerr_to_sigmag(f_err,f) for f,f_err in zip(x.flux,x.flux_err)]
+
+
 
 def create_uneven_vectors(data_fn, meta_fn, output_fn):
     data, metadata = load_data(data_fn, meta_fn)
@@ -180,9 +186,60 @@ def create_uneven_vectors(data_fn, meta_fn, output_fn):
     plt.gca().invert_yaxis()
     plt.show()
 
-    # preprocess_data_utils.save_vectors(dataset,interpolated_data_dir+output_fn)
+def create_linearly_interpolated_vectors_careful(data_fn, meta_fn, output_fn, 
+    obs_days=30, points_per_band=3,n_channels=2, lc_max_length=128):
 
-# merge_files()
+    lcs, meta = load_data(data_fn,meta_fn)
+    
+    X=np.zeros((meta.shape[0],n_channels,lc_max_length))
+    X_void=np.zeros((meta.shape[0],n_channels,lc_max_length))
+    lens=np.zeros((meta.shape[0],))
+
+    group_by_id = lcs.groupby(['object_id'])['mjd'].agg(['min','max']).rename(columns = lambda x : 'mjd_' + x).reset_index()    
+    group_by_id["mjd_diff"]=group_by_id.mjd_max-group_by_id.mjd_min
+
+    obids = meta.object_id.unique()
+    print(group_by_id)
+
+    for i,object_id in enumerate(obids):
+        lc = lcs[lcs.object_id == object_id]
+        lc = lc.sort_values(by=['mjd'])
+        print(object_id)
+        lc_length = group_by_id.loc[group_by_id.object_id == object_id, 'mjd_diff'].values[0]
+        lc_start = group_by_id.loc[group_by_id.object_id == object_id, 'mjd_min'].values[0]
+        lc_stop = group_by_id.loc[group_by_id.object_id == object_id, 'mjd_max'].values[0]
+        # print(lc_start)
+        # print(lc_stop)
+        lc_length=int(np.floor(lc_length))
+        lc_length = lc_length if lc_length<=lc_max_length else lc_max_length
+        # print(lc_length)
+        t = np.arange(lc_length)
+        #scale time
+        lc['scaled_mjd'] = (lc_length-1)*(lc.mjd-lc_start)/(lc_stop-lc_start)
+        lc_r = lc[lc.passband == 0] 
+        lc_g = lc[lc.passband == 1]
+        X[i,0,-lc_length:] = np.interp(t,lc_r.scaled_mjd,lc_r.magpsf)        
+        X[i,1,-lc_length:] = np.interp(t,lc_g.scaled_mjd,lc_g.magpsf)
+        X_void[i,0,-lc_length:] = [np.abs(lc_r.scaled_mjd - t_i).min() for t_i in t]
+        X_void[i,1,-lc_length:] = [np.abs(lc_g.scaled_mjd - t_i).min() for t_i in t]
+        lens[i] = lc_length
+
+    vectors = np.concatenate((X, X_void), axis=1)
+    print(vectors.shape)
+    Y = meta.true_target.values
+    dataset = {
+    'X':vectors,
+    'Y':Y,
+    'ids':obids,
+    'lens':lens
+    }
+
+    print((meta['object_id'].values == obids).all())
+    print((meta['object_id'].values == obids))
+
+    assert((meta['object_id'].values == obids).all())    
+
+    preprocess_data_utils.save_vectors(dataset,output_fn)
 
 sn_f = 'simsurvey_sn4_balanced.csv'
 sn_m_f = 'simsurvey_sn4_metadata_balanced.csv'
@@ -190,10 +247,13 @@ sn_m_f = 'simsurvey_sn4_metadata_balanced.csv'
 # sn_f = 'simsurvey_lcs_test.csv'
 # sn_m_f = 'simsurvey_metadata_test.csv'
 
+# create_linearly_interpolated_vectors_careful(sn_f, sn_m_f, 'simsurvey_data_balanced_4_mag_linear_careful.h5')
+# create_linearly_interpolated_vectors_careful(sn_f, sn_m_f, 'simsurvey_test_linear_careful.h5')
 
-create_uneven_vectors(sn_f,sn_m_f,'simsurvey_data_balanced_4_mag_uneven.h5')
+# create_uneven_vectors(sn_f,sn_m_f,'simsurvey_data_balanced_4_mag_uneven.h5')
 # create_uneven_vectors(sn_f,sn_m_f,'simsurvey_test_uneven_tnorm_backl.h5')
-# create_gp_interpolated_vectors(sn_f, sn_m_f, 'simsurvey_test_gp.h5')
+# create_gp_interpolated_vectors(sn_f, sn_m_f, 'simsurvey_test_gp_careful.h5')
+create_gp_interpolated_vectors(sn_f, sn_m_f, 'simsurvey_data_balanced_4_mag_gp_careful.h5')
 # create_linearly_interpolated_vectors(sn_f, sn_m_f, 'simsurvey_test_linear.h5')
 # df = preprocess_data_utils.generate_gp_all_objects(id_list_short,sn_short,sn_m,timesteps=128)
 # print(df)

@@ -173,8 +173,8 @@ def create_gp_interpolated_vectors(lcs_fn, meta_fn, output_fn,
     sn_enough['flux_err'] = sim_error*sn_enough.flux
     print(sn_enough)
 
-    X,id_list, tags = preprocess_data_utils.create_gp_interpolated_vectors(id_list,sn_enough,tags_enough,
-        timesteps=lc_max_length)
+    X,id_list, tags, lens = preprocess_data_utils.create_gp_interpolated_vectors(id_list,sn_enough,tags_enough,
+        timesteps=lc_max_length, var_length=True)
 
     flux_to_mag = lambda f: 30-2.5*math.log10(f)
     f = np.vectorize(flux_to_mag)
@@ -183,7 +183,8 @@ def create_gp_interpolated_vectors(lcs_fn, meta_fn, output_fn,
     dataset = {
         'X':X,
         'Y':tags,
-        'ids':id_list
+        'ids':id_list,
+        'lens':lens
     }
 
     preprocess_data_utils.save_vectors(dataset,output_fn)
@@ -212,8 +213,8 @@ def create_uneven_vectors(lcs_fn, meta_fn, output_fn,
 
 
 # create_linearly_interpolated_vectors(data_dir+'mars_sn_lcs_4.csv', data_dir+'mars_sn_meta_4.csv', data_dir+'real_test_linear_3pb_30obsd.h5')
-create_linearly_interpolated_vectors_careful(data_dir+'mars_sn_lcs_4.csv', data_dir+'mars_sn_meta_4.csv', data_dir+'real_test_linear_3pb_30obsd_careful.h5')
-# create_gp_interpolated_vectors(data_dir+'mars_sn_lcs_4.csv', data_dir+'mars_sn_meta_4.csv', data_dir+'real_test_gp_3pb_30obsd_careful.h5')
+# create_linearly_interpolated_vectors_careful(data_dir+'mars_sn_lcs_4.csv', data_dir+'mars_sn_meta_4.csv', data_dir+'real_test_linear_3pb_30obsd_careful.h5')
+create_gp_interpolated_vectors(data_dir+'mars_sn_lcs_4.csv', data_dir+'mars_sn_meta_4.csv', data_dir+'real_test_gp_careful_3pb_30obsd.h5')
 # create_uneven_vectors(data_dir+'mars_sn_lcs_4.csv', data_dir+'mars_sn_meta_4.csv', data_dir+'real_test_uneven_3pb_30obsd.h5')
 
 

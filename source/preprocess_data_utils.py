@@ -331,7 +331,8 @@ def fit_2d_gp(
 
 
 def generate_gp_single_event(
-    df: pd.DataFrame, timesteps: int = 100, pb_wavelengths: Dict = ZTF_PB_WAVELENGTHS
+    df: pd.DataFrame, timesteps: int = 100, pb_wavelengths: Dict = ZTF_PB_WAVELENGTHS,
+    var_length = False
 ) -> pd.DataFrame:
     """Intermediate helper function useful for visualisation of the original data with the mean of
     the Gaussian Process interpolation as well as the uncertainity.
@@ -366,13 +367,17 @@ def generate_gp_single_event(
 
     gp_predict = fit_2d_gp(df, pb_wavelengths=pb_wavelengths)
 
-    number_gp = timesteps
+    if var_length:
+        mjd_diff = max(df['mjd'])-min(df['mjd'])
+        number_gp = timesteps if mjd_diff>timesteps else int(np.floor(mjd_diff))
+    else:
+        number_gp = timesteps
     gp_times = np.linspace(min(df["mjd"]), max(df["mjd"]), number_gp)
     obj_gps = predict_2d_gp(gp_predict, gp_times, gp_wavelengths)
     obj_gps["passband"] = obj_gps["passband"].map(inverse_pb_wavelengths)
     obj_gps["passband"] = obj_gps["passband"].astype(int)
 
-    return obj_gps
+    return obj_gps, number_gp
 
 def create_gp_interpolated_vectors(
     object_list: List[str],
@@ -380,6 +385,7 @@ def create_gp_interpolated_vectors(
     obs_metadata: pd.DataFrame,
     timesteps: int = 100,
     pb_wavelengths: Dict = ZTF_PB_WAVELENGTHS,
+    var_length = False
 ) -> pd.DataFrame:
     """Generate Gaussian Process interpolation for all objects within 'object_list'. Upon
     completion, a dataframe is returned containing a value for each time step across each passband.
@@ -428,30 +434,30 @@ def create_gp_interpolated_vectors(
     n_lcs = len(object_list)
     n_channels = 2
     X = np.ones((n_lcs, n_channels, timesteps)) #if flux is negative, set it to 1, so it can be converted to mag
+    lens = np.zeros((n_lcs,))
     #if flux_err is negative, make it positive
     for i,object_id in enumerate(object_list):
         print(f"OBJECT ID:{object_id} at INDEX:{object_list.index(object_id)}")
         df = obs_transient[obs_transient["object_id"] == object_id]
 
-        obj_gps = generate_gp_single_event(df, timesteps, pb_wavelengths)
+        obj_gps, lc_length = generate_gp_single_event(df, timesteps, pb_wavelengths, var_length=var_length)
         # print(obj_gps)
 
         obj_gps = pd.pivot_table(obj_gps, index="mjd", columns="passband", values="flux")
-        print(obj_gps)
-        X[i,0,:] = obj_gps[0]
-        X[i,1,:] = obj_gps[1]
+        X[i,0,-lc_length:] = obj_gps[0]
+        X[i,1,-lc_length:] = obj_gps[1]
         id_list.append(object_id)
         true_target = obs_metadata[obs_metadata.object_id==object_id].true_target.values[0]
         targets.append(true_target)
-        # break
+        lens[i] = lc_length
     #     obj_gps = obj_gps.reset_index()
         # obj_gps["object_id"] = object_id
         # adf = np.vstack((adf, obj_gps))
     
     X = np.where(X>0,X,1)
     # print(X)
-    print(X)
-    return X, id_list,targets
+    # print(X)
+    return X, id_list, targets, lens
     # return pd.DataFrame(data=obj_gps, columns=obj_gps.columns)
 
 def append_vectors(dataset,outputFile):
