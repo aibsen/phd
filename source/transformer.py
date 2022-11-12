@@ -73,27 +73,32 @@ class TSTransformer(nn.Module):
     def reset_parameters(self) -> None:
         self.init_weights()
 
-    def forward(self, src):
+    def forward(self, seq):
         # if self.uneven_t: # seq lengths are different and thus are specified in dataset
         # print(type(src))
-        if type(src) == list: # seq lengths are different and thus are specified in dataset
-            lens = src[1]
-            src = src[0]
-            src = src.permute(0,2,1)
-            pad_mask = self.pad_mask(src,lens)
+        if type(seq) == list: # seq lengths are different and thus are specified in dataset
+            lens = seq[1]
+            seq = seq[0]
+            seq = seq.permute(0,2,1)
+            pad_mask = self.pad_mask(seq,lens)
             # print(pad_mask.shape)
         else:
-            src = src.permute(0,2,1)
+            seq = seq.permute(0,2,1)
             pad_mask = torch.zeros((src.shape[0],src.shape[1]), device=torch.device('cuda'))
             # print(pad_mask.shape)
         
-        tgr = src
-        x = src
+        src = seq
+        tgr = seq
+
+        src = self.layer_dict['encoder_embedding'](src) #input embedding 
+        src = self.layer_dict['encoder_pos'](src) #positional encoding
+        memory = self.layer_dict['encoder'](src, src_key_padding_mask=pad_mask)
         
-        x = self.layer_dict['embedding'](x) #input embedding 
-        x = self.layer_dict['pos'](x) #positional encoding
-        x = self.layer_dict['encoder'](x, src_key_padding_mask=pad_mask)
-        
+        tgr = self.layer_dict['decoder_embedding'](tgr)
+        tgr = self.layer_dict['decoder_pos'](tgr)
+        dec = self.layer_dict['decoder'](tgr, memory, tgr_mask,memory_mask, pad_mask
+         )
+
         try:
             #try to take all of the encoder representations as they are
             #this is in case the local decoder has dimensions to allow for it
