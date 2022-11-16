@@ -6,89 +6,20 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import tqdm
-import os
+# import os
 import numpy as np
 import pandas as pd
 import time
 import sys
+# from experiment import Experiment
 
 
-class Experiment(nn.Module):
-    def __init__(self, network_model, 
-        experiment_name,
-        num_epochs=100,
-        num_output_classes=14, 
-        learning_rate=1e-03,
-        batch_size = 64, 
-        train_data=None, 
-        val_data=None,
-        test_data=None,
-        train_sampler=None,
-        val_sampler=None,
-        test_sampler = None,
-        weight_decay_coefficient=1e-03, 
-        patience=3,
-        validation_step=3,
-        class_weights = None):
+class Seq2SeqExperiment():
+    def __init__(self, parent):
+        self.parent = parent
 
-        super(Experiment, self).__init__()
-
-        if torch.cuda.is_available():
-            self.device = torch.device('cuda')
-            os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-            # print("using GPU")
-
-        self.experiment_name = experiment_name
-        self.model = network_model
-        self.model.to(self.device)
-        self.model.reset_parameters()
-        self.patience = patience
-        self.validation_step = validation_step
-        self.batch_size = batch_size
-        self.num_epochs = num_epochs
-        self.num_output_classes = num_output_classes
-
-        self.train_data=None
-        self.val_data=None
-        self.test_data=None
-
-        if self.validation_step > self.num_epochs:
-            print("Validation step should be less than the number of epochs so at least one run is possible")
-            sys.exit()
-        
-        if self.patience > int(self.num_epochs/self.validation_step):
-            print("Infinite patience, early stopping won't be an option")
-        
-        if train_data:
-            train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=True)
-            self.train_data = train_loader
-
-        if val_data:
-            val_loader = torch.utils.data.DataLoader(val_data, batch_size=batch_size, shuffle=True)
-            self.val_data = val_loader
-
-        if test_data:
-            test_loader = torch.utils.data.DataLoader(test_data,batch_size=batch_size,shuffle=True)
-            self.test_data = test_loader
-
-        self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate, amsgrad=False,
-                                    weight_decay=weight_decay_coefficient)
-        # self.criterion = nn.CrossEntropyLoss().to(self.device)  # send the loss computation to the GPU
-        self.criterion = torch.nn.MSELoss(self.device)
-        # Generate the directory names
-        self.experiment_folder = os.path.abspath(experiment_name)
-        self.experiment_logs = os.path.abspath(os.path.join(self.experiment_folder, "result_outputs"))
-        self.experiment_saved_models = os.path.abspath(os.path.join(self.experiment_folder, "saved_models"))
-
-        if not os.path.exists(self.experiment_folder):  # If experiment directory does not exist
-            os.mkdir(self.experiment_folder)  # create the experiment directory
-            os.mkdir(self.experiment_logs)  # create the experiment log directory
-            os.mkdir(self.experiment_saved_models)  # create the experiment saved models directory
-
-        # Set best model f1_score to be at 0 and the best epoch to be num_epochs, since we are just starting
-        self.best_epoch = num_epochs
-        self.best_loss = np.inf
-        self.state = {}
+    def __getattr__(self, attr):
+        return getattr(self.parent, attr)
 
     def run_train_iter(self, x, y,i):
         self.train()
@@ -124,44 +55,23 @@ class Experiment(nn.Module):
         return loss
 
     def save_model(self, model_save_name):
-        save_path = os.path.join(self.experiment_saved_models, model_save_name)
-        torch.save(self.state,save_path)
+        self.parent.save_model(model_save_name)
 
     def load_model(self, model_save_dir, model_save_name):
-        save_path = os.path.join(model_save_dir, model_save_name)
-        self.state = torch.load(f=save_path)
-        self.model.load_state_dict(state_dict=self.state['model'])
-        self.optimizer.load_state_dict(state_dict=self.state['optimizer'])
-        self.best_epoch = self.state['epoch']
-        self.best_f1 = self.state['f1']
-        # return state['best_val_model_idx']#, state['best_val_model_acc'], state['best_val_model_f1']
+        self.parent.save_model(model_save_dir, model_save_name)
 
     def save_statistics(self, stats, fn):
         stats_keys = ['epoch', 'loss']
-        stats_df = pd.DataFrame(stats.cpu().numpy() , columns = stats_keys)
-        stats_df = stats_df[stats_df.epoch>=0]
-        stats_df.epoch = stats_df.epoch.astype(int)
-        stats_df.to_csv(self.experiment_logs+'/'+fn ,sep=',',index=False)
-    
-    def save_results(self, results, fn):
-        results_keys = ['object_id','prediction','target']
-        results_df = pd.DataFrame(results.cpu().numpy(), columns=results_keys)
-        results_df.to_csv(self.experiment_logs+'/'+fn,sep=',',index=False)
+        self.parent.save_statistics(stats,fn,stats_keys)
 
-    def save_probabilities(self, results, fn):
-        results_keys = ['object_id']+[str(i) for i in range (self.num_output_classes)]
-        results_df = pd.DataFrame(results.cpu().numpy(), columns=results_keys)
-        results_df['object_id'] = results_df['object_id'].astype('int64')
-        results_df.to_csv(self.experiment_logs+'/'+fn,sep=',',index=False)
-
-
-    def run_test_phase(self, data=None, model_name="final_model.pth.tar",data_name="test",load_model=True):
+    def run_test_phase(self, data=None, model_name="final_model.pth.tar",
+        data_name="test",load_model=True):
         
         start_time = time.time()
         data = data if data else self.test_data
         
         if load_model:
-            self.load_model(model_save_dir=self.experiment_saved_models, model_save_name=model_name)
+            self.load_model(model_save_name=model_name)
         running_loss = 0.0
         
         with tqdm.tqdm(total=len(data)) as pbar:
@@ -178,9 +88,11 @@ class Experiment(nn.Module):
         test_stats[0,0] = 1 #epoch
         test_stats[0,1] = loss #loss
 
-        self.save_statistics(test_stats, "reconstruction_"+data_name+"_summary.csv")
+        self.save_statistics(test_stats, data_name+"_summary.csv")
 
-    def run_final_train_phase(self, data_loaders=None,n_epochs=None, model_name="final_model.pth.tar", data_name = 'final_training'):
+    def run_final_train_phase(self, data_loaders=None,n_epochs=None, 
+        model_name="final_model.pth.tar", 
+        data_name = 'final_training'):
 
         start_time = time.time()
         n_epochs = n_epochs if n_epochs else self.best_epoch
@@ -215,7 +127,7 @@ class Experiment(nn.Module):
                 elapsed_time = time.time() - start_time  
                 pbar_train.set_description("Train loss: {:.3f}       , ET {:.2f}s".format(train_loss,elapsed_time))
                 
-        self.save_statistics(train_stats, 'reconstruction_{}_summary.csv'.format(data_name))
+        self.save_statistics(train_stats, '{}_summary.csv'.format(data_name))
         self.state = {
             'epoch': n_epochs,
             'model': self.model.state_dict(),
@@ -223,7 +135,10 @@ class Experiment(nn.Module):
                     }
         self.save_model(model_name) 
         
-    def run_train_phase(self):
+    def run_train_phase(self, model_name='best_validation_model.pth.tar', load_model=False):
+        if load_model:
+            self.load_model(model_save_name=model_name)
+
         start_time = time.time()
 
         strike = 0
@@ -236,8 +151,6 @@ class Experiment(nn.Module):
         val_n_batches = len(self.val_data)
         val_loss = -1
         val_idx = 0
-
-
 
         with tqdm.tqdm(total=self.num_epochs) as pbar_train:
 
@@ -294,8 +207,8 @@ class Experiment(nn.Module):
 
         #save statistics at the end only
         self.save_model("best_validation_model.pth.tar")
-        self.save_statistics(train_stats, 'reconstruction_training_summary.csv')
-        self.save_statistics(val_stats, 'reconstruction_validation_summary.csv')
+        self.save_statistics(train_stats, 'training_summary.csv')
+        self.save_statistics(val_stats, 'validation_summary.csv')
     
     
     def run_experiment(self):
@@ -303,18 +216,4 @@ class Experiment(nn.Module):
         Runs experiment train and evaluation iterations, saving the model and best val model and val model accuracy after each epoch
         :return: The summary current_epoch_losses from starting epoch to total_epochs.
         """
-        if self.train_data and self.val_data:
-            print("")
-            print("Starting training phase")
-            print("")
-            self.run_train_phase()
-        #     print("")
-            print("Starting final training phase")
-        #     print("")
-            self.run_final_train_phase()
-
-        if self.test_data:
-            print("")
-            print("Starting test phase")
-            print("")
-            self.run_test_phase(self.test_data)
+        self.parent.run_experiment()

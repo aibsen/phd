@@ -26,7 +26,7 @@ class TSTransformerAutoencoder(nn.Module):
         local_decoder = None,
         reduction = 'last',
         classifier = None,
-        classify = True):
+        classify = False):
         super().__init__()
 
         self.layer_dict = nn.ModuleDict()
