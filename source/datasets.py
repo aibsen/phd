@@ -53,7 +53,7 @@ class LCs(Dataset):
                 if 'lens' in f.keys():
                     lens=f['lens']
                     self.lens=torch.tensor(lens, device = self.device, dtype=torch.int64)
-                    # print(self.lens.dtype)
+                    print(self.lens.dtype)
                 # print(self.X.shape)
                 # print(self.Y.shape)
                 # print(self.ids.shape)

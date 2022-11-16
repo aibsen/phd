@@ -30,7 +30,8 @@ class Experiment(nn.Module):
         weight_decay_coefficient=1e-03, 
         patience=3,
         validation_step=3,
-        class_weights = None):
+        class_weights = None,
+        load_models = False):
 
         super(Experiment, self).__init__()
 
