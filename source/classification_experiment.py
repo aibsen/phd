@@ -23,7 +23,6 @@ class ClassificationExperiment():
 
     def run_train_iter(self, x, y):
         # print(x.shape)
-
         self.train()
         self.optimizer.zero_grad()  # set all weight grads from previous training iters to 0
         out = self.model.forward(x)  # forward the data in the model
@@ -49,7 +48,7 @@ class ClassificationExperiment():
         self.parent.save_model(model_save_name)
 
     def load_model(self, model_save_name):
-        self.parent.save_model(model_save_name)
+        self.parent.load_model(model_save_name)
 
     def save_statistics(self, stats, fn):
         stats_keys = ['epoch', 'accuracy', 'loss', 'f1', 'precision', 'recall']
@@ -73,6 +72,7 @@ class ClassificationExperiment():
         start_time = time.time()
         data = data if data else self.test_data
         if load_model:
+            print("loading model")
             self.load_model(model_save_name=model_name)
         results_cm = torch.zeros((len(data.dataset),3), dtype=torch.int64, device = self.device) # holds ids, preds, targets
         results_probs = torch.zeros((len(data.dataset),self.num_output_classes+1), dtype=torch.double, device = self.device) # holds ids, probability predictions
@@ -121,7 +121,6 @@ class ClassificationExperiment():
         with tqdm.tqdm(total=n_epochs) as pbar_train:
 
             for i, epoch_idx in enumerate(range(n_epochs)):
-                
                 epoch_start_time = time.time()
                 running_loss = 0.0
                 cm_idx = 0    
@@ -152,7 +151,7 @@ class ClassificationExperiment():
                 
         self.save_statistics(train_stats, '{}_summary.csv'.format(data_name))
         self.save_results(last_train_cm, '{}_results.csv'.format(data_name))
-        self.state = {
+        self.parent.state = {
             'epoch': n_epochs,
             'model': self.model.state_dict(),
             'optimizer':self.optimizer.state_dict()
@@ -228,7 +227,7 @@ class ClassificationExperiment():
                         best_val_cm = current_val_cm
                         self.best_f1 = f1
                         self.best_epoch = epoch_idx
-                        self.state = {
+                        self.parent.state = {
                             'epoch': epoch_idx,
                             'model': self.model.state_dict(),
                             'optimizer':self.optimizer.state_dict()

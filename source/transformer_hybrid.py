@@ -1,15 +1,42 @@
-from typing import Tuple
-
 import torch
-from torch import nn, Tensor
 import torch.nn.functional as F
-import torch.nn
-from positional_encodings import PositionalEncoding, TimeFiLMEncoding
+import torch.nn as nn
+from positional_encodings import PositionalEncoding
+import sys
 import numpy as np
 
-import sys
+class GRUDecoder(nn.Module):
+    def __init__(self,
+        d_model = 128,
+        dropout: float = 0.2):
+        super().__init__()
+        self.layer_dict = nn.ModuleDict()
+        self.d_model = d_model
+        self.layer_dict['gru'] = nn.GRU(input_size=self.d_model, hidden_size = self.d_model, batch_first=True, dropout=dropout, num_layers=1)
+        self.layer_dict['bn'] = nn.BatchNorm1d(self.d_model)
 
-class TSTransformerAutoencoder(nn.Module):
+    def reset_parameters(self):
+        gru_attrs = self.layer_dict['gru']._flat_weights
+        gru_attr_names = self.layer_dict['gru']._flat_weights_names
+        for item,name in zip(gru_attrs, gru_attr_names):
+            if 'weight'in name:
+                for idx in np.arange(3):
+                    if 'ih' in name:
+                        nn.init.xavier_uniform_(item[idx*self.d_model:(idx+1)*self.d_model])
+                    elif 'hh' in name:
+                        nn.init.orthogonal_(item[idx*self.d_model:(idx+1)*self.d_model])
+            elif 'bias' in name:
+                nn.init.constant_(item, 0)
+        self.layer_dict['bn'].reset_parameters()           
+
+    def forward(self,x):
+        out, h = self.layer_dict['gru'](x)
+        out = out.permute(0,2,1)
+        out = self.layer_dict['bn'](out)
+        out = out.permute(0,2,1)
+        return out
+
+class TSTransformerAutoencoderHybrid(nn.Module):
 
     def __init__(self,
         input_features = 4, #???
@@ -23,9 +50,8 @@ class TSTransformerAutoencoder(nn.Module):
         num_output_classes = 4,
         embedding_layer = None,
         encoder_positional_encoding = None,
-        decoder_positional_encoding = None,
         local_decoder = None,
-        reduction = 'last',
+        decoder = None,
         classifier = None,
         classify = False):
         super().__init__()
@@ -46,17 +72,18 @@ class TSTransformerAutoencoder(nn.Module):
         
         self.layer_dict['encoder'] = nn.TransformerEncoder(encoder_layer, nlayers, norm=encoder_norm_layer)
 
-        self.layer_dict['decoder_embedding'] = embedding_layer if embedding_layer\
-            is not None else nn.Linear(input_features, d_model,bias=False)
-        
-        self.layer_dict['decoder_pos'] = decoder_positional_encoding if decoder_positional_encoding\
-            is not None else PositionalEncoding(d_model, dropout,max_len=max_len)
-            # , custom_position=uneven_t)
+        if decoder == 'linear':
+            self.layer_dict['decoder'] = nn.Sequential(
+                    nn.Linear(d_model,d_model),
+                    nn.ReLU(),
+                    nn.Dropout(p=0.2)
+                )
+        elif decoder == 'gru':
+            self.layer_dict['decoder'] = GRUDecoder()
+        else:
+            print("decoder option not implemented")
+            sys.exit(1)
 
-        decoder_layer = nn.TransformerDecoderLayer(d_model, nhead, d_hid, dropout,batch_first=True)
-        decoder_norm_layer = nn.LayerNorm(d_model)
-
-        self.layer_dict['decoder'] = nn.TransformerDecoder(decoder_layer, nlayers, norm=decoder_norm_layer)
         self.layer_dict['local_decoder'] = local_decoder if local_decoder\
             is not None else nn.Linear(d_model,input_features,bias=False)
 
@@ -74,8 +101,7 @@ class TSTransformerAutoencoder(nn.Module):
         self.d_model = d_model
         self.nheads = nhead
         self.classify = classify
-        self.tgt_mask = self.generate_square_subsequent_mask(self.max_len)
-        self.memory_mask = self.generate_square_subsequent_mask(self.max_len)
+
         self.init_weights()
 
     def init_weights(self) -> None:
@@ -110,36 +136,24 @@ class TSTransformerAutoencoder(nn.Module):
         
 
         src = seq
-        tgt = seq
         
         src = self.layer_dict['encoder_embedding'](src) #input embedding 
         src = self.layer_dict['encoder_pos'](src) #positional encoding
-        memory = self.layer_dict['encoder'](src,mask=self.tgt_mask)#.unsqueeze(0).repeat(src.shape[0]*self.nheads,1,1))*pad_mask)#, src_key_padding_mask=pad_mask)
-        tgt = self.layer_dict['decoder_embedding'](tgt)
-        tgt = self.layer_dict['decoder_pos'](tgt)
-        out = self.layer_dict['decoder'](tgt=tgt, memory=memory,\
-            tgt_mask=self.tgt_mask, memory_mask=self.memory_mask)# memory_key_padding_mask=memory_pad_mask)#,\
-            # tgt_key_padding_mask=pad_mask)#, memory_pad_mask)
-        
+        memory = self.layer_dict['encoder'](src)#.unsqueeze(0).repeat(src.shape[0]*self.nheads,1,1))*pad_mask)#, src_key_padding_mask=pad_mask)
+        # print(memory.shape)
+        out_last =  memory[:,-1,:]
+        # print(out_last.shape)
+
+        out = self.layer_dict['decoder'](memory)
+        # print(out.shape)
+
         out = self.layer_dict['local_decoder'](out)
+        # print(out.shape)
         out = out.permute(0,2,1)
         out = torch.nan_to_num(out)
        
         if self.classify:
-            out_last = memory[:,-1,:]
             out = self.layer_dict['classifier'](out_last)
+
         return out
 
-    def pad_mask(self, q, lens_q):
-        len_q = q.size(1)
-        mask = torch.zeros((q.shape[0],q.shape[1]),device=torch.device('cuda'))
-        for i,l in enumerate(lens_q):
-            # mask[i,l:] = 1
-            mask[i,0:-l] = 1
-            
-        return mask==1 
-
-    def generate_square_subsequent_mask(self, sz: int) -> Tensor:
-        mask = torch.triu(torch.ones(sz, sz) * float(1), diagonal=1).cuda()
-        return mask==float(1)
-        # return torch.triu(torch.ones(sz, sz) * float('-inf'), diagonal=1).cuda()

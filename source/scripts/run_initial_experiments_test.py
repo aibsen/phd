@@ -3,7 +3,7 @@ from threading import local
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from datasets import LCs
-from experiment import Experiment
+from source.classification_experiment import Experiment
 from seeded_experiment import SeededExperiment
 from transformer_classifier import TSTransformerClassifier
 from positional_encodings import ConvolutionalEmbedding, TimeFiLMEncoding

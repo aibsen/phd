@@ -23,7 +23,8 @@ class Experiment(nn.Module):
         weight_decay_coefficient=1e-03, 
         patience=3,
         validation_step=3,
-        type = 'se12seq'):
+        type = 'seq2seq',
+        pick_up = False):
 
         super(Experiment, self).__init__()
 
@@ -67,8 +68,8 @@ class Experiment(nn.Module):
 
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate, amsgrad=False,
                                     weight_decay=weight_decay_coefficient)
-        # self.criterion = nn.CrossEntropyLoss().to(self.device)  # send the loss computation to the GPU
-        self.criterion = torch.nn.MSELoss(self.device)
+
+
         # Generate the directory names
         self.experiment_folder = os.path.abspath(experiment_name)
         self.experiment_logs = os.path.abspath(os.path.join(self.experiment_folder, "result_outputs"))
@@ -81,24 +82,35 @@ class Experiment(nn.Module):
 
         # Set best model f1_score to be at 0 and the best epoch to be num_epochs, since we are just starting
         self.best_epoch = num_epochs
-        self.best_loss = np.inf
         self.state = {}
 
         if type == 'classification':
             self.instance = ClassificationExperiment(self)
+            self.criterion = nn.CrossEntropyLoss().to(self.device)  # send the loss computation to the GPU
+            self.best_f1 = 0
         else:
             self.instance = Seq2SeqExperiment(self)
+            self.criterion = torch.nn.MSELoss(self.device)
+            self.best_loss = np.inf
+
+        self.pickup = pick_up
 
     def save_model(self, model_save_name):
         save_path = os.path.join(self.experiment_saved_models, model_save_name)
         torch.save(self.state,save_path)
 
     def load_model(self,model_save_name="final_model_pth.tar"):
-        save_path = os.path.join(self.model_save_dir, model_save_name)
-        self.state = torch.load(f=save_path)
-        self.model.load_state_dict(state_dict=self.state['model'])
-        self.optimizer.load_state_dict(state_dict=self.state['optimizer'])
-        self.best_epoch = self.state['epoch']
+        try:
+            save_path = os.path.join(self.experiment_saved_models, model_save_name)
+            print("loading model from {}".format(save_path))
+            self.state = torch.load(f=save_path)
+            # print(self.state)
+            self.model.load_state_dict(state_dict=self.state['model'])
+            self.optimizer.load_state_dict(state_dict=self.state['optimizer'])
+            self.best_epoch = self.state['epoch']
+        except Exception as e:
+            print("could not find saved model in {}".format(save_path))
+            print(e)
 
     def save_statistics(self, stats, fn, stats_keys):
         fn = fn if isinstance(self.instance, ClassificationExperiment) else "reconstruction_"+fn
@@ -107,18 +119,20 @@ class Experiment(nn.Module):
         stats_df.epoch = stats_df.epoch.astype(int)
         stats_df.to_csv(self.experiment_logs+'/'+fn ,sep=',',index=False)
 
-    def run_train_phase(self, load_model=False):
-        if load_model:
+    def run_train_phase(self):
+        if self.pickup:
             self.load_model(model_save_name='best_validation_model.pth.tar')
         self.instance.run_train_phase()
 
     def run_final_train_phase(self, data_loaders=None, n_epochs=None,\
-        model_name='final_model.pth', data_name='final_training'):
+        model_name='final_model.pth.tar', data_name='final_training'):
+        if self.pickup:
+            self.load_model(model_save_name='final_model.pth.tar')
         self.instance.run_final_train_phase(data_loaders,n_epochs,model_name,data_name)
 
     def run_test_phase(self, data=None, model_name ='final_model.pth.tar',\
-        data_name='test', load_model = True):
-        self.instance.run_test_phase(data, model_name, data_name, load_model)
+        data_name='test'):
+        self.instance.run_test_phase(data, model_name, data_name)
 
     def run_experiment(self):
         if self.train_data and self.val_data:

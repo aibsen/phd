@@ -504,3 +504,117 @@ def plot_histograms_rapid(metric="f1",results_dir = "../../results/exp2_rapid_p1
     plt.ylim(top=26)
     plt.legend()
     plt.show()
+
+def plot_reconstruction(original,reconstructed,l):
+    fig,ax = plt.subplots(1,1)
+    ax.scatter(np.arange(l),original[0,-l:],label='original',color='r',marker='+')
+    ax.scatter(np.arange(l),original[1,-l:],label='original',color='g', marker='+')
+    ax.scatter(np.arange(l),reconstructed[0,-l:],label='reconstructed',color='r')
+    ax.scatter(np.arange(l),reconstructed[1,-l:],label='reconstructed',color='g')
+    plt.gca().invert_yaxis()
+    plt.legend()
+    plt.show()
+
+def plot_reconstructions_per_epoch(random_samples, step,best_epoch,output_fn):
+    random_samples = [r for r in random_samples if r[5]<= best_epoch]
+    length = len(random_samples)
+    cols = int(step)
+    rows = int(np.ceil(length/cols))
+    i = 0
+    # print(len(random_samples))
+    if length ==1:
+        fig, ax = plt.subplots(1, 1)
+        #original, reconstructed, length, id, class, epoch 
+        original = random_samples[0][0]
+        reconstructed = random_samples[0][1]
+        l = random_samples[0][2]
+        id = random_samples[0][3]
+        c = random_samples[0][4]
+        epoch = random_samples[0][5]
+        ax.scatter(np.arange(l),original[0,-l:],linewidths=1.0, label='original r band', color='r', marker='+')
+        ax.scatter(np.arange(l),original[1,-l:],linewidths=1.0, label='original g band', color='g', marker='+')
+        ax.scatter(np.arange(l),reconstructed[0,-l:],linewidths=1.0, label='reconstructed r band', color='r', marker='.')
+        ax.scatter(np.arange(l),reconstructed[1,-l:],linewidths=1.0,  label='reconstructed g band', color='g', marker='.')
+        ax.set_title("epoch {}".format(epoch+1),fontsize='medium')
+        ax.tick_params(
+            axis='x',          # changes apply to the x-axis
+            which='both',      # both major and minor ticks are affected
+            bottom=False,      # ticks along the bottom edge are off
+            top=False,         # ticks along the top edge are off
+            labelbottom=False) # labels along the bottom edge are off
+
+        ax.invert_yaxis()
+        handles, labels = ax.get_legend_handles_labels()
+
+    elif rows==1:
+        fig, ax = plt.subplots(1, length)
+        for col in np.arange(length):
+            #original, reconstructed, length, id, class, epoch 
+            original = random_samples[col][0]
+            reconstructed = random_samples[col][1]
+            l = random_samples[col][2]
+            id = random_samples[col][3]
+            c = random_samples[col][4]
+            epoch = random_samples[col][5]
+            ax[col].scatter(np.arange(l),original[0,-l:],linewidths=1.0, label='original r band', color='r', marker='+')
+            ax[col].scatter(np.arange(l),original[1,-l:],linewidths=1.0, label='original g band', color='g', marker='+')
+            ax[col].scatter(np.arange(l),reconstructed[0,-l:],linewidths=1.0, label='reconstructed r band', color='r', marker='.')
+            ax[col].scatter(np.arange(l),reconstructed[1,-l:],linewidths=1.0,  label='reconstructed g band', color='g', marker='.')
+            ax[col].set_title("epoch {}".format(epoch+1),fontsize='medium')
+
+            ax[col].tick_params(
+                axis='x',          # changes apply to the x-axis
+                which='both',      # both major and minor ticks are affected
+                bottom=False,      # ticks along the bottom edge are off
+                top=False,         # ticks along the top edge are off
+                labelbottom=False) # labels along the bottom edge are off
+
+            ax[col].invert_yaxis()
+        handles, labels = ax[0].get_legend_handles_labels()
+
+    else:    
+        fig, ax = plt.subplots(rows, cols)
+        for row in np.arange(rows):
+            for col in np.arange(cols):
+                if i < len(random_samples):
+                    #original, reconstructed, length, id, class, epoch 
+                    original = random_samples[i][0]
+                    reconstructed = random_samples[i][1]
+                    l = random_samples[i][2]
+                    id = random_samples[i][3]
+                    c = random_samples[i][4]
+                    epoch = random_samples[i][5]
+                    ax[row][col].scatter(np.arange(l),original[0,-l:],linewidths=1.0, label='original r band', color='r', marker='+')
+                    ax[row][col].scatter(np.arange(l),original[1,-l:],linewidths=1.0, label='original g band', color='g', marker='+')
+                    ax[row][col].scatter(np.arange(l),reconstructed[0,-l:],linewidths=1.0,label='reconstructed r band', color='r', marker='.')
+                    ax[row][col].scatter(np.arange(l),reconstructed[1,-l:],linewidths=1.0, label='reconstructed g band', color='g', marker='.')
+                    ax[row][col].set_title("epoch {}".format(epoch+1),fontsize='medium')
+
+                    ax[row][col].tick_params(
+                        axis='x',          # changes apply to the x-axis
+                        which='both',      # both major and minor ticks are affected
+                        bottom=False,      # ticks along the bottom edge are off
+                        top=False,         # ticks along the top edge are off
+                        labelbottom=False) # labels along the bottom edge are off
+
+                    ax[row][col].invert_yaxis()
+                else:
+                    fig.delaxes(ax[row][col])
+
+                i+=1
+    
+        handles, labels = ax[0][0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc='lower right')
+    fig.set_figheight(2*rows)
+        # fig.set_figwidth(9*cols)
+    fig.set_figwidth(3.5*cols)
+        # fig.set_dpi(100)
+    # fig.set_figheight(12)
+    # fig.set_figwidth(12)
+    fig.set_dpi(100)
+    # fig.suptitle("Light curve reconstruction per epoch")
+    plt.tight_layout()
+
+    plt.savefig(output_fn)
+    # plt.show()
+            

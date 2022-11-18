@@ -11,6 +11,8 @@ import numpy as np
 import pandas as pd
 import time
 import sys
+import plot_utils
+import preprocess_data_utils
 # from experiment import Experiment
 
 
@@ -34,31 +36,28 @@ class Seq2SeqExperiment():
         return loss
 
     def run_evaluation_iter(self, x, y, i):
+        
         self.eval()  # sets the system to validation mode
         out = self.model.forward(x)  # forward the data in the model
         batch_size = x[0].shape[0]
-        out = out.contiguous().view(batch_size,-1)
+        
+        random_reconstructed = out[0].cpu().detach()
+        # print(batch_size)
+        # print(x[0].shape)
+        # print(out.shape)
+        out_reshape = out.contiguous().view(batch_size,-1)
+        # print(out_reshape.shape)
         tgt = x[0].contiguous().view(batch_size,-1)
-        loss = self.criterion(out,tgt)
+        # print(tgt.shape)
+        loss = self.criterion(out_reshape,tgt)
 
-        if i==0:
-            original = tgt[0].view(-1,128).cpu().detach()
-            reconstructed = out[0].view(-1,128).cpu().detach()
-            l = x[1][0].cpu()
-            plt.figure()
-            plt.scatter(np.arange(l),original[0,-l:],label='original')
-            plt.scatter(np.arange(l),reconstructed[0,-l:], label='reconstructed')
-            plt.gca().invert_yaxis()
-            plt.legend()
-            plt.show()
-
-        return loss
+        return loss, random_reconstructed, out
 
     def save_model(self, model_save_name):
         self.parent.save_model(model_save_name)
 
-    def load_model(self, model_save_dir, model_save_name):
-        self.parent.save_model(model_save_dir, model_save_name)
+    def load_model(self, model_save_name):
+        self.parent.load_model(model_save_name)
 
     def save_statistics(self, stats, fn):
         stats_keys = ['epoch', 'loss']
@@ -71,13 +70,30 @@ class Seq2SeqExperiment():
         data = data if data else self.test_data
         
         if load_model:
+            print("loading model")
             self.load_model(model_save_name=model_name)
         running_loss = 0.0
         
+        test_dataset_length = len(data.dataset)
+        n_channels = data.dataset[0][0][0].shape[0]
+        max_lc_length = data.dataset[0][0][0].shape[1]
+
+        reconstructed_x = torch.zeros(test_dataset_length,n_channels,max_lc_length)
+        lens = torch.zeros(test_dataset_length)
+        reconstructed_y = torch.zeros(test_dataset_length)
+        reconstructed_ids = torch.zeros(test_dataset_length)
+
         with tqdm.tqdm(total=len(data)) as pbar:
             for i,(x, y, ids) in enumerate(data):
-                loss = self.run_evaluation_iter(x=x,y=y)
+                loss, random_sample, out = self.run_evaluation_iter(x=x,y=y,i=0)
                 running_loss += loss.item()
+
+                reconstructed_x[i*self.batch_size:i*self.batch_size+out.shape[0]] = out.detach().cpu() 
+                reconstructed_y[i*self.batch_size:i*self.batch_size+out.shape[0]] = y.cpu()
+                reconstructed_ids[i*self.batch_size:i*self.batch_size+out.shape[0]] =ids.cpu()
+                lens[i*self.batch_size:i*self.batch_size+out.shape[0]] = x[1].cpu()
+
+                
                 pbar.update(1)
                 elapsed_time = time.time() - start_time 
                 pbar.set_description("Test loss: {:.3f}        , ET {:.2f}s".format(running_loss/(i+1),elapsed_time))
@@ -88,6 +104,14 @@ class Seq2SeqExperiment():
         test_stats[0,0] = 1 #epoch
         test_stats[0,1] = loss #loss
 
+        results_dataset = {
+            'X': reconstructed_x,
+            'Y': reconstructed_y,
+            'ids': reconstructed_ids,
+            'lens': lens
+        }
+
+        preprocess_data_utils.save_vectors(results_dataset,self.parent.experiment_logs+'/'+'reconstructed_{}.h5'.format(data_name))
         self.save_statistics(test_stats, data_name+"_summary.csv")
 
     def run_final_train_phase(self, data_loaders=None,n_epochs=None, 
@@ -128,7 +152,7 @@ class Seq2SeqExperiment():
                 pbar_train.set_description("Train loss: {:.3f}       , ET {:.2f}s".format(train_loss,elapsed_time))
                 
         self.save_statistics(train_stats, '{}_summary.csv'.format(data_name))
-        self.state = {
+        self.parent.state = {
             'epoch': n_epochs,
             'model': self.model.state_dict(),
             'optimizer':self.optimizer.state_dict(),
@@ -152,6 +176,8 @@ class Seq2SeqExperiment():
         val_loss = -1
         val_idx = 0
 
+
+        random_samples =[]
         with tqdm.tqdm(total=self.num_epochs) as pbar_train:
 
             for i, epoch_idx in enumerate(range(self.num_epochs)):
@@ -174,8 +200,13 @@ class Seq2SeqExperiment():
                     running_val_loss = 0.0
 
                     for idx, (x, y, ids) in enumerate(self.val_data):
-                        loss = self.run_evaluation_iter(x=x, y=y, i=idx)
+                        loss, random_sample, out = self.run_evaluation_iter(x=x, y=y, i=idx)
                         running_val_loss += loss.item()
+                        if idx == len(self.val_data)-1:
+                            random_example = [x[0][0].cpu().detach(), random_sample,x[1][0].cpu(),ids[0].cpu(),y[0].cpu(), epoch_idx] 
+                            #original, reconstructed, length, id, class, epoch 
+                            random_samples.append(random_example)
+                            
 
                     val_loss = running_val_loss/val_n_batches
                     val_stats[val_idx,0] = epoch_idx+1 #epoch
@@ -186,7 +217,7 @@ class Seq2SeqExperiment():
                     if val_loss < self.best_loss:
                         self.best_loss = val_loss
                         self.best_epoch = epoch_idx
-                        self.state = {
+                        self.parent.state = {
                             'epoch': epoch_idx,
                             'model': self.model.state_dict(),
                             'optimizer':self.optimizer.state_dict(),
@@ -205,7 +236,9 @@ class Seq2SeqExperiment():
                     pbar_train.set_description("Tr/Val loss: {:.3f}/{:.3f}, Best epoch: {}, ET {:.2f}s".format(train_loss,val_loss,self.best_epoch+1,elapsed_time))
                     break
 
-        #save statistics at the end only
+        #save statistics at the end onlystats_df.to_csv(self.experiment_logs+'/'+fn ,sep=',',index=False)
+        print("saving reconstruction results...")
+        plot_utils.plot_reconstructions_per_epoch(random_samples, self.validation_step, self.best_epoch, self.experiment_logs+'/'+"reconstruction_per_epoch.png")
         self.save_model("best_validation_model.pth.tar")
         self.save_statistics(train_stats, 'training_summary.csv')
         self.save_statistics(val_stats, 'validation_summary.csv')

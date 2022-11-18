@@ -19,7 +19,9 @@ from sklearn.metrics import f1_score, accuracy_score
 import pandas as pd
 
 class CVExperiment(nn.Module):
-    def __init__(self, exp_name,exp_params=None,train_data=None,test_data=None,k=5,seed=None):
+    def __init__(self, exp_name,exp_params=None,
+        train_data=None,test_data=None,k=5):
+        # , seed=1772670):
 
         super(CVExperiment, self).__init__()
         self.experiment_folder = os.path.abspath(exp_name)
@@ -32,42 +34,67 @@ class CVExperiment(nn.Module):
             os.mkdir(self.experiment_logs)  # create the experiment log directory
             os.mkdir(self.experiment_folds)  # create the experiment fold directories
             os.mkdir(self.experiment_saved_models)  # create the experiment fold directories
-
-        self.exp_params = exp_params
+        
         self.k = k
-        self.train_data = train_data
-        self.test_data = test_data
+        self.reset_experiment_params(exp_params)
+        self.reset_experiment_datasets(train_data,test_data)
+
+
+    def reset_experiment_params(self,exp_params):
+        self.exp_params = exp_params
         self.best_val_fold = None
         self.best_fold = None
         self.batch_size = self.exp_params['batch_size']
         self.mean_best_epoch = None
+        self.experiment_type = 'classification' if 'experiment_type' not in exp_params else exp_params['experiment_type']
+        self.pick_up = False if 'pick_up' not in exp_params else exp_params['pick_up']
+    
+    def reset_experiment_datasets(self, train_data=None, test_data=None):
+        self.train_data = train_data
+        self.test_data = test_data
         
         if train_data:
             self.train_length = len(train_data)
             idxs = np.arange(self.train_length)
             targets = train_data.targets
-            kf = StratifiedKFold(n_splits=k)
+            kf = StratifiedKFold(n_splits=self.k)
             self.kfs = kf.split(idxs,targets)
+
 # 
-    def save_fold_statistics(self, summary_file, metric='f1'):
-        stats = {'epoch':[],'accuracy':[],'loss':[],'f1':[],'precision':[],'recall':[]}
+    def save_fold_statistics(self, summary_file):
+
+        if self.experiment_type == 'classification':
+            metric = "f1"
+            stats = {'epoch':[],'accuracy':[],'loss':[],'f1':[],'precision':[],'recall':[]}
+        elif self.experiment_type == 'seq2seq':
+            metric = 'loss'
+            stats = {'epoch':[],'loss':[]}
+            summary_file = 'reconstruction_'+summary_file
+        else:
+            print('Invalid experiment_type: currently only classification and seq2seq are implemented')
+
         for k in np.arange(self.k):
             exp_name = self.experiment_folds+"/fold_k"+str(k+1)+"/result_outputs"
             summary = pd.read_csv(exp_name+"/"+summary_file)
-            stats_at_break = summary[summary[metric] == summary[metric].max()]
+            best = summary[metric].max() if metric != 'loss' else summary[metric].min()
+            stats_at_break = summary[summary[metric] == best] 
+        
             for k in stats.keys():
                 stats[k].append(stats_at_break.iloc[0][k])
 
-        best_fold = stats[metric].index(max(stats[metric]))+1    
+        best_best = max(stats[metric]) if metric != 'loss' else min(stats[metric])
+        best_fold = stats[metric].index(best_best)+1    
         stats = {k: sum(v)/len(v) for k, v in stats.items()}
         stats_df =  pd.DataFrame(stats, index=[0]).rename(columns = lambda c : 'mean_'+ c)
         stats_df.mean_epoch = stats_df.mean_epoch.apply(np.ceil).astype(int)
-        if summary_file == 'validation_summary.csv':
+
+        if 'validation_summary.csv' in summary_file:
             self.best_fold = best_fold    
             self.mean_best_epoch = int(stats_df.iloc[0]['mean_epoch'])
+
         stats_df.to_csv(self.experiment_logs+"/"+summary_file,index=False)
 
-    def run_experiment(self, final_only=False,test_data_name="test"):
+    def run_experiment(self,final_only=False,test_data_name="test"):
         if self.train_data and not final_only:
             self.run_train_phase()
         if self.train_data and self.test_data:
@@ -93,13 +120,14 @@ class CVExperiment(nn.Module):
                 test_data = self.test_data,
                 num_output_classes=self.exp_params["num_output_classes"],
                 patience = self.exp_params["patience"],
-                validation_step = self.exp_params["validation_step"]
+                validation_step = self.exp_params["validation_step"],
+                type = self.experiment_type,
+                pick_up = self.pick_up
             )
 
             # start_time = time.time()
             experiment.run_train_phase()
             # print("--- %s seconds ---" % (time.time() - start_time))
-
 
         self.save_fold_statistics("validation_summary.csv")
         self.save_fold_statistics("training_summary.csv") #there's an error here that I don't have time to fix: I'm saving best training stats, but kept last training epoch results.
@@ -115,6 +143,8 @@ class CVExperiment(nn.Module):
             weight_decay_coefficient = self.exp_params["weight_decay_coefficient"],
             batch_size = self.exp_params["batch_size"],
             num_output_classes=self.exp_params["num_output_classes"],
+            type=self.experiment_type,
+            pick_up = self.pick_up
         )
 
         train_loader = torch.utils.data.DataLoader(self.train_data, batch_size=self.batch_size, shuffle=True)
@@ -134,6 +164,7 @@ class CVExperiment(nn.Module):
             experiment_name = exp_name,
             batch_size = self.exp_params["batch_size"],
             num_output_classes= self.exp_params["num_output_classes"],
+            type = self.experiment_type
         )
 
         test_loader = torch.utils.data.DataLoader(self.test_data, batch_size=self.batch_size, shuffle=True)
@@ -143,65 +174,8 @@ class CVExperiment(nn.Module):
 
 
     def get_mean_best_epoch(self):
-        val_summary = pd.read_csv(self.experiment_logs+"/"+"validation_summary.csv")
+        fn = "validation_summary.csv"
+        fn = 'reconstruction_'+fn if self.experiment_type=='seq2seq' else fn
+        val_summary = pd.read_csv(self.experiment_logs+'/'+fn)
         best_mean_epoch = val_summary.iloc[0]['mean_epoch']
         return best_mean_epoch
-
-    def get_fold_results(self, fold):
-        fold_dir = self.experiment_folds+"/fold_k{}/result_outputs/".format(fold)
-        results_path = fold_dir+"validation_results.csv"
-        results = pd.read_csv(results_path)
-        predictions = results.prediction
-        targets = results.target
-        return predictions.values,targets.values
-
-    def save_best_fold_results_acc(self, plot=True):
-        cum_acc_scores = []
-
-        for fold in range(1,self.k+1):
-            predictions, targets = self.get_fold_results(fold)
-            cum_acc_scores.append(accuracy_score(targets,predictions))
-
-        best_acc = {}
-        best_fold_idx = cum_acc_scores.index(np.max(cum_acc_scores))
-        best_acc['fold']=best_fold_idx+1
-        best_acc['accuracy']=cum_acc_scores[best_fold_idx]
-            
-        best_acc_scores = pd.DataFrame(best_acc, index = [0])
-        best_acc_scores.to_csv(self.experiment_logs+"/"+"best_acc_scores.csv",index=False)
-
-    def save_best_fold_results_f1(self, plot=True):
-        reduction = ["micro","macro","weighted"]
-        cum_f1_scores = {r:[] for r in reduction}
-
-        for fold in range(1,self.k+1):
-            predictions, targets = self.get_fold_results(fold)
-            fold_dir = self.experiment_folds+"/fold_k{}/result_outputs/".format(fold)
-            f1_scores = {r:f1_score(targets,predictions,average=r) for r in reduction}
-            f1_scores_df = pd.DataFrame(f1_scores, index=[0])
-            f1_scores_df.to_csv(fold_dir+"f1_scores.csv",index=False)
-            for r in reduction:
-                cum_f1_scores[r].append(f1_scores[r])
-        
-        avg_f1_scores = {r:np.mean(cum_f1_scores[r]) for r in cum_f1_scores}
-        avg_f1_scores_df = pd.DataFrame(avg_f1_scores, index =[0])
-        avg_f1_scores_df.to_csv(self.experiment_logs+"/"+"mean_f1_scores.csv",index=False)
-
-        best_f1_per_reduction = {r:[] for r in ['reduction','fold']+reduction}
-        for r in reduction:
-            best_fold_idx = cum_f1_scores[r].index(np.max(cum_f1_scores[r]))
-            best_f1_per_reduction['reduction'].append(r)
-            best_f1_per_reduction['fold'].append(best_fold_idx+1)
-            for red in reduction:
-                best_f1_per_reduction[red].append(cum_f1_scores[red][best_fold_idx])
-            
-            if plot: 
-                self.save_result_plots(self.experiment_logs,fold=best_fold_idx+1,plot_name="best_cm_{}_fold_{}.png".format(r,best_fold_idx+1))
-                print(r) 
-        best_f1_scores = pd.DataFrame(best_f1_per_reduction)
-        best_f1_scores.to_csv(self.experiment_logs+"/"+"best_f1_scores.csv")
-                     
-    def save_result_plots(self,save_dir,fold,plot_name="best_cm.png"):
-        save_path = save_dir+"/"+plot_name
-        predictions, targets = self.get_fold_results(fold)
-        plot_best_val_cm(targets,predictions, save=True,verbose=False, output_file=save_path)
