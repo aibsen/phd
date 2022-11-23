@@ -11,7 +11,7 @@ from analyze_simsurvey_test_results import *
 results_dir = "../../results/"
 data_dir = "/home/ai/phd/data/ztf/training/"
 # data_dir = "/home/ai/phd/data/ztf/testing/"
-exp_name = results_dir+"transformer_ae"
+exp_name = results_dir+"transformer_ae_p10"
 
 #0, num_epochs = 50
 #1, num_epochs = 40
@@ -54,8 +54,10 @@ real_test_dataset = LCs(lc_length, data_dir+'real_test_linear_careful_3pb_30obsd
 real_test_dataset.load_data_into_memory()
 real_test_dataset.packed=True
 
-epochs = [20, 30, 50, 100]
-positional_encodings = ['default', 'fourier']
+epochs = [30,50]
+# epochs = [20, 30, 50, 100]
+# positional_encodings = ['default', 'fourier']
+positional_encodings = ['fourier']
 
 for epoch in epochs:
     for pos in positional_encodings:
@@ -104,7 +106,7 @@ for epoch in epochs:
             "weight_decay_coefficient" : wdc,
             "use_gpu" : use_gpu,
             "batch_size" : batch_size,
-            "patience": 5,
+            "patience": 10,
             "validation_step":3,    
             "num_output_classes": 4,
             "experiment_type": 'classification',

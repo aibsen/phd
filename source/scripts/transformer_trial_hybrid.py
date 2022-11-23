@@ -12,7 +12,7 @@ from analyze_simsurvey_test_results import *
 results_dir = "../../results/"
 data_dir = "/home/ai/phd/data/ztf/training/"
 # data_dir = "/home/ai/phd/data/ztf/testing/"
-exp_name = results_dir+"transformer_hybrid_ae"
+exp_name = results_dir+"transformer_hybrid_ae_p10"
 
 
 lc_length = 128
