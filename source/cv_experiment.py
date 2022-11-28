@@ -134,19 +134,22 @@ class CVExperiment(nn.Module):
 
         #final run of cv experiment??
     def run_final_train_phase(self):
+        if not self.mean_best_epoch:
+            self.mean_best_epoch = self.get_mean_best_epoch()
 
         experiment = Experiment(
             network_model = self.exp_params["network_model"],
             experiment_name = self.experiment_folder,
-            num_epochs = self.exp_params["num_epochs"],
+            num_epochs = self.mean_best_epoch,
             learning_rate = self.exp_params["learning_rate"],
             weight_decay_coefficient = self.exp_params["weight_decay_coefficient"],
             batch_size = self.exp_params["batch_size"],
             num_output_classes=self.exp_params["num_output_classes"],
             type=self.experiment_type,
+            patience=self.exp_params['patience'],
+            validation_step=self.exp_params['validation_step'],
             pick_up = self.pick_up
         )
-
         train_loader = torch.utils.data.DataLoader(self.train_data, batch_size=self.batch_size, shuffle=True)
         start_time = time.time()
         # print(self.mean_best_epoch)

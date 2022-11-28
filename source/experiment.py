@@ -4,7 +4,7 @@ import os
 import sys
 import numpy as np
 import torch.optim as optim
-from seq2seq_experiment import Seq2SeqExperiment
+from seq2seq_experiment1 import Seq2SeqExperiment
 from classification_experiment import ClassificationExperiment
 import pandas as pd
 
@@ -90,7 +90,14 @@ class Experiment(nn.Module):
             self.best_f1 = 0
         else:
             self.instance = Seq2SeqExperiment(self)
-            self.criterion = torch.nn.MSELoss(self.device)
+            try:
+                self.model.reset_loss(num_epochs)
+                self.criterion = self.model.criterion
+            except Exception as e:
+                print("!! USING MSE INSTEAD OF CUSTOM")
+                print(e)
+                self.criterion = torch.nn.MSELoss(self.device)
+
             self.best_loss = np.inf
 
         self.pickup = pick_up
@@ -104,7 +111,7 @@ class Experiment(nn.Module):
             save_path = os.path.join(self.experiment_saved_models, model_save_name)
             print("loading model from {}".format(save_path))
             self.state = torch.load(f=save_path)
-            # print(self.state)
+            # print(self.state['optimizer'])
             self.model.load_state_dict(state_dict=self.state['model'])
             self.optimizer.load_state_dict(state_dict=self.state['optimizer'])
             self.best_epoch = self.state['epoch']

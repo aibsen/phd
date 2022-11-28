@@ -527,7 +527,7 @@ def plot_reconstructions_per_epoch(random_samples, step,best_epoch,output_fn):
         #original, reconstructed, length, id, class, epoch 
         original = random_samples[0][0]
         reconstructed = random_samples[0][1]
-        l = random_samples[0][2]
+        l = random_samples[0][2] -1
         id = random_samples[0][3]
         c = random_samples[0][4]
         epoch = random_samples[0][5]
@@ -552,7 +552,7 @@ def plot_reconstructions_per_epoch(random_samples, step,best_epoch,output_fn):
             #original, reconstructed, length, id, class, epoch 
             original = random_samples[col][0]
             reconstructed = random_samples[col][1]
-            l = random_samples[col][2]
+            l = random_samples[col][2] -1
             id = random_samples[col][3]
             c = random_samples[col][4]
             epoch = random_samples[col][5]
@@ -580,7 +580,7 @@ def plot_reconstructions_per_epoch(random_samples, step,best_epoch,output_fn):
                     #original, reconstructed, length, id, class, epoch 
                     original = random_samples[i][0]
                     reconstructed = random_samples[i][1]
-                    l = random_samples[i][2]
+                    l = random_samples[i][2] -1
                     id = random_samples[i][3]
                     c = random_samples[i][4]
                     epoch = random_samples[i][5]

@@ -28,6 +28,7 @@ class ClassificationExperiment():
         out = self.model.forward(x)  # forward the data in the model
         loss = self.criterion(out,y)
         loss.backward()  # backpropagate
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 10)
         self.optimizer.step()
         predicted = F.softmax(out.data,dim=1)
         predicted = torch.argmax(predicted, 1)
@@ -111,7 +112,9 @@ class ClassificationExperiment():
         n_epochs = n_epochs if n_epochs else self.best_epoch
         n_epochs = int(n_epochs)
         data_loaders = data_loaders if data_loaders else [self.train_data,self.val_data]
-        self.model.reset_parameters()
+        if not self.pickup:
+            print("resetting parameters...")
+            self.model.reset_parameters()
         train_stats = torch.full((int(n_epochs+1),6),-1, dtype=torch.float, device=self.device) # holds epoch, acc, loss, f1, precission, recall, per train epoch
 
         n_batches = sum([len(data) for data in data_loaders])
@@ -132,7 +135,10 @@ class ClassificationExperiment():
                         batch_size = len(x)
                         torch.stack((ids,preds,y),dim=1,out=last_train_cm[cm_idx])
                         cm_idx+=batch_size
-
+                # print("")
+                # print(running_loss)
+                # print(n_batches)
+                # print(running_loss/n_batches)
                 preds, targets = last_train_cm[:,1],last_train_cm[:,2]
                 precision, recall = precision_recall(preds, targets, num_classes=self.num_output_classes, average='macro')
                 train_loss = running_loss/n_batches

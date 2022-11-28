@@ -73,7 +73,12 @@ class SeededExperiment(nn.Module):
             exp_name = self.experiment_folder+"/seed_"+str(seed)+"/result_outputs"
             summary = pd.read_csv(exp_name+"/"+summary_file)
             for k in stats.keys():
-                stats[k].append(summary.iloc[0][k])
+                if 'final' in summary_file:
+
+                    value = summary[k].min() if k == 'loss' else summary[k].max()
+                    stats[k].append(value)
+                else:
+                    stats[k].append(summary.iloc[0][k])
 
         if validation:
             mean_stats = {k: sum(v)/len(v) for k, v in stats.items()}

@@ -10,6 +10,7 @@ import os
 import matplotlib.pyplot as plt
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import preprocess_data_utils
+from astropy.time import Time
 import matplotlib.pyplot as plt
 
 
@@ -26,7 +27,11 @@ ztf_type_dict_4 = {
 
 ztf_names = [ztf_type_dict_4[k] for k in ztf_type_dict_4]
 
-
+url_template_mars = r"https://mars.lco.global/?sort_value=jd&sort_order=desc&objectId="
+url_template_lasair = r"https://lasair-ztf.lsst.ac.uk/object/"
+keys_mars = ["objectId","time","filter","magpsf"]
+keys_lasair = ["MJD",'Filter', 'magpsf','status']
+output_path = 'alerce_sn_low_prob_lcs_dirty.csv'
 
 
 
@@ -214,12 +219,109 @@ def create_uneven_vectors(lcs_fn, meta_fn, output_fn,
 
 # create_linearly_interpolated_vectors(data_dir+'mars_sn_lcs_4.csv', data_dir+'mars_sn_meta_4.csv', data_dir+'real_test_linear_3pb_30obsd.h5')
 # create_linearly_interpolated_vectors_careful(data_dir+'mars_sn_lcs_4.csv', data_dir+'mars_sn_meta_4.csv', data_dir+'real_test_linear_3pb_30obsd_careful.h5')
-create_gp_interpolated_vectors(data_dir+'mars_sn_lcs_4.csv', data_dir+'mars_sn_meta_4.csv', data_dir+'real_test_gp_careful_3pb_30obsd.h5')
+# create_gp_interpolated_vectors(data_dir+'mars_sn_lcs_4.csv', data_dir+'mars_sn_meta_4.csv', data_dir+'real_test_gp_careful_3pb_30obsd.h5')
 # create_uneven_vectors(data_dir+'mars_sn_lcs_4.csv', data_dir+'mars_sn_meta_4.csv', data_dir+'real_test_uneven_3pb_30obsd.h5')
 
+#no idea why, but this has fewern objs
+# fn = data_dir+'alerce_sn_lc.csv'
+# m = pd.read_csv(fn)
+# print(len(m.objectId.unique()))
+
+#4 classes, probs>=0.4 :1132
+# fn0 = data_dir+'alerce_sn_usable.csv'
+# m0 = pd.read_csv(fn0)
+# print(len(m0.objectId.unique()))
+# print(m0.predicted_class.unique())
+# print(m0.predicted_class_proba.min())
+
+#has 6 classes: 4171
+# fn1 = data_dir+'sn_metadata.csv'
+# m1 = pd.read_csv(fn1)
+# print(len(m.objectId.unique()))
+# print(len(m1.objectId.unique()))
+# print(m1.predicted_class.unique())
+# print(m1.predicted_class_proba.min())
+
+# has 4 classes: 3134, same as mars_meta_clean, contains alerce usable
+# fn1 = data_dir+'mars_sn_meta_4.csv'
+# m1 = pd.read_csv(fn1)
+# print(len(m1.objectId.unique()))
+# print(m1.predicted_class.unique())
+# print(m1.predicted_class_proba.min())
+
+# 879
+# fn1 = data_dir+'alerce_sn_lc_lasair.csv'
+# m1 = pd.read_csv(fn1)
+# print(len(m1.objectId.unique()))
+
+
+#3834
+# fn1 = data_dir+'mars_sn_lcs.csv'
+# m1 = pd.read_csv(fn1)
+# print(len(m1.objectId.unique()))
+
+# I got all probs from alerce that were sn, total:
+# fn1 = data_dir+'alerce_original.csv'
+# m1 = pd.read_csv(fn1)
+# relvant_keys = ['objectId', 
+#     'predicted_class_proba', 
+#     'predicted_class',
+#     'SNIa_prob',
+#     'SNII_prob',
+#     'SLSN_prob',
+#     'SNIbc_prob' ]
+
+# alerce_probs = m1[relvant_keys]
+# print(alerce_probs.head())
+# print(alerce_probs.predicted_class.unique())
+# alerce_probs=alerce_probs[alerce_probs.predicted_class.str.contains('SN')]
+# alerce_probs.to_csv(data_dir+'alerce_sn_meta.csv', index=False)
+# print(alerce_probs.predicted_class_proba.min())
+# print(alerce_probs.predicted_class_proba.max())
+# print(alerce_probs.predicted_class.unique())
+
+#1132 objs prob>= 0.4, 6067 objs prob<0.4, total of 7199
+# fn1 = data_dir+'alerce_sn_meta.csv'
+# m1 = pd.read_csv(fn1)
+# print(m1.shape)
+# print(len(m1.objectId.unique()))
+# print(m1[m1.predicted_class_proba>=0.4])
+# print(m1[m1.predicted_class_proba<0.4])
+
+# fn1 = data_dir+'alerce_sn_meta.csv'
+# m1 = pd.read_csv(fn1)
+# m_low = m1[m1.predicted_class_proba<0.4]
+# print(m_low.shape)
+# m_low.to_csv(data_dir+'alerce_sn_meta_low_prob.csv', index=False)
 
 
 
+def scrap_sns_mars(metadata_fn, url_template=url_template_mars, keys=keys_mars, output_path=output_path):
+    print(metadata_fn)
+    metadata = pd.read_csv(data_dir+metadata_fn+'.csv')
+    ids = list(metadata.objectId.values)
+    n_ids = len(ids)
+    for i, id in enumerate(ids[4244:]):
+        print('Object {}/{}: {}'.format(i+4244,n_ids,id))
+        try:
+            url = url_template+id
+            tables = pd.read_html(url) # Returns list of all tables on page
+            print(tables)
+            df = tables[0][keys]
+            print(df)
+            times = list(df.time.astype('str').values)
+            times = Time(times, format="iso")
+            mjds = times.mjd
+            df.loc[:,'time']=mjds
+            df.to_csv(data_dir+output_path, mode='a', header=not os.path.exists(output_path),index=False)
+        except Exception as e:
+            print('Object id {} not found in url'.format(id))
+            print(e)
 
 
+# fn1 = 'alerce_sn_meta_low_prob'
+# scrap_sns_mars(fn1)
+fn_meta = data_dir+'alerce_sn_meta_low_prob.csv'
+
+def clean_csvs(fn_meta, fn_data):
 
