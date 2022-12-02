@@ -14,7 +14,7 @@ class Experiment(nn.Module):
     def __init__(self, network_model, 
         experiment_name,
         num_epochs=100,
-        num_output_classes=14, 
+        num_output_classes=4, 
         learning_rate=1e-03,
         batch_size = 64, 
         train_data=None, 
@@ -99,7 +99,6 @@ class Experiment(nn.Module):
                 self.criterion = torch.nn.MSELoss(self.device)
 
             self.best_loss = np.inf
-
         self.pickup = pick_up
 
     def save_model(self, model_save_name):
@@ -126,20 +125,41 @@ class Experiment(nn.Module):
         stats_df.epoch = stats_df.epoch.astype(int)
         stats_df.to_csv(self.experiment_logs+'/'+fn ,sep=',',index=False)
 
-    def run_train_phase(self):
+    def run_train_phase(self,train_data_name='',
+        model_load_name='best_validation_model.pth.tar',
+        model_save_name='best_validation_model.pth.tar'):
+
         if self.pickup:
-            self.load_model(model_save_name='best_validation_model.pth.tar')
-        self.instance.run_train_phase()
+            self.load_model(model_save_name=model_load_name)
+        self.instance.run_train_phase(load_model=False,
+            model_save_name=model_save_name,
+            train_data_name=train_data_name)
 
     def run_final_train_phase(self, data_loaders=None, n_epochs=None,\
-        model_name='final_model.pth.tar', data_name='final_training'):
+        model_load_name='final_model.pth.tar',
+        model_save_name='final_model.pth.tar', data_name='final_training',train_data_name=''):
         if self.pickup:
-            self.load_model(model_save_name='final_model.pth.tar')
-        self.instance.run_final_train_phase(data_loaders,n_epochs,model_name,data_name)
+            self.load_model(model_save_name=model_load_name)
+        self.instance.run_final_train_phase(data_loaders,n_epochs,model_save_name,
+            data_name,train_data_name=train_data_name)
 
     def run_test_phase(self, data=None, model_name ='final_model.pth.tar',\
         data_name='test'):
         self.instance.run_test_phase(data, model_name, data_name)
+
+    def run_test_phase(self, data=None, model_name ='final_model.pth.tar',\
+        data_name='test'):
+        self.instance.run_test_phase(data, model_name, data_name)
+
+    def run_prediction(self, data=None, model_name='final_model.pth.tar',\
+        data_name='predicted'):
+        # try:
+        self.instance.run_prediction(data=data,model_name=model_name,data_name=data_name)
+        # except Exception as e:
+            # print("only seq2seq experiments predict sequences")
+            # print(e)
+            # sys.exit(1)
+
 
     def run_experiment(self):
         if self.train_data and self.val_data:
@@ -157,4 +177,4 @@ class Experiment(nn.Module):
         #     print("Starting test phase")
         #     print("")
             self.instance.run_test_phase(self.test_data)
-            
+    

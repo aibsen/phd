@@ -94,16 +94,37 @@ class CVExperiment(nn.Module):
 
         stats_df.to_csv(self.experiment_logs+"/"+summary_file,index=False)
 
-    def run_experiment(self,final_only=False,test_data_name="test"):
-        if self.train_data and not final_only:
-            self.run_train_phase()
-        if self.train_data and self.test_data:
-            self.run_final_train_phase()
-            self.run_test_phase(test_data_name)
-        elif self.test_data:
-            self.run_test_phase(test_data_name)
+    def run_experiment(self,final_only=False,
+        test_data_name="test",train_data_name='',
+        model_load_name_train='best_validation_model.pth.tar',
+        model_save_name_train='best_validation_model.pth.tar',
+        model_load_name_final_train='final_model.pth.tar',
+        model_save_name_final_train='final_model.pth.tar',
+        ):
 
-    def run_train_phase(self):
+        if self.train_data and not final_only:
+            self.run_train_phase(train_data_name,
+                model_load_name=model_load_name_train,
+                model_save_name=model_save_name_train)
+
+        if self.train_data and self.test_data:
+            self.run_final_train_phase(train_data_name,
+                model_load_name=model_load_name_final_train,
+                model_save_name=model_save_name_final_train)
+
+            self.run_test_phase(test_data_name, 
+                model_name=model_save_name_final_train)
+
+        elif self.test_data:
+            self.run_test_phase(test_data_name,
+            model_name=model_save_name_final_train)
+
+    def run_train_phase(self,
+        train_data_name='',
+        model_load_name='best_validation_model.pth.tar',
+        model_save_name='best_validation_model.pth.tar'
+        ):
+
         for k,(tr,val) in enumerate(self.kfs):
             train_dataset = torch.utils.data.Subset(self.train_data, tr)
             val_dataset = torch.utils.data.Subset(self.train_data, val)
@@ -126,16 +147,22 @@ class CVExperiment(nn.Module):
             )
 
             # start_time = time.time()
-            experiment.run_train_phase()
+            experiment.run_train_phase(train_data_name,
+                model_load_name=model_load_name,
+                model_save_name=model_save_name)
             # print("--- %s seconds ---" % (time.time() - start_time))
 
-        self.save_fold_statistics("validation_summary.csv")
-        self.save_fold_statistics("training_summary.csv") #there's an error here that I don't have time to fix: I'm saving best training stats, but kept last training epoch results.
+        self.save_fold_statistics(train_data_name+"validation_summary.csv")
+        self.save_fold_statistics(train_data_name+"training_summary.csv") #there's an error here that I don't have time to fix: I'm saving best training stats, but kept last training epoch results.
 
         #final run of cv experiment??
-    def run_final_train_phase(self):
+    def run_final_train_phase(self,train_data_name='',
+        model_load_name='final_model.pth.tar',
+        model_save_name='final_model.pth.tar'
+        ):
+
         if not self.mean_best_epoch:
-            self.mean_best_epoch = self.get_mean_best_epoch()
+            self.mean_best_epoch = self.get_mean_best_epoch(train_data_name=train_data_name)
 
         experiment = Experiment(
             network_model = self.exp_params["network_model"],
@@ -154,12 +181,16 @@ class CVExperiment(nn.Module):
         start_time = time.time()
         # print(self.mean_best_epoch)
         if not self.mean_best_epoch:
-            self.mean_best_epoch = self.get_mean_best_epoch()
+            self.mean_best_epoch = self.get_mean_best_epoch(train_data_name=train_data_name)
 
-        experiment.run_final_train_phase(data_loaders=[train_loader], n_epochs=self.mean_best_epoch)
+        experiment.run_final_train_phase(data_loaders=[train_loader], 
+            n_epochs=self.mean_best_epoch,
+            train_data_name=train_data_name,
+            model_load_name=model_load_name,
+            model_save_name=model_save_name)
         # print("--- %s seconds ---" % (time.time() - start_time))
 
-    def run_test_phase(self, test_data_name='test'):
+    def run_test_phase(self, test_data_name='test',model_name='final_model.pth.tar'):
 
         exp_name = self.experiment_folder
         experiment = Experiment(
@@ -172,12 +203,28 @@ class CVExperiment(nn.Module):
 
         test_loader = torch.utils.data.DataLoader(self.test_data, batch_size=self.batch_size, shuffle=True)
         # start_time = time.time()
-        experiment.run_test_phase(data=test_loader,data_name=test_data_name)
+        experiment.run_test_phase(data=test_loader,data_name=test_data_name,model_name=model_name)
         # print("--- %s seconds ---" % (time.time() - start_time))
 
 
-    def get_mean_best_epoch(self):
-        fn = "validation_summary.csv"
+    def run_prediction(self, data_name='predicted',model_name='final_model.pth.tar'):
+
+        exp_name = self.experiment_folder
+        experiment = Experiment(
+            network_model = self.exp_params["network_model"],
+            experiment_name = exp_name,
+            batch_size = self.exp_params["batch_size"],
+            num_output_classes= self.exp_params["num_output_classes"],
+            type = self.experiment_type
+        )
+        test_loader = torch.utils.data.DataLoader(self.test_data, batch_size=self.batch_size, shuffle=True)
+        # start_time = time.time()
+        experiment.run_prediction(data=test_loader,data_name=data_name,model_name=model_name)
+        # print("--- %s seconds ---" % (time.time() - start_time))
+
+
+    def get_mean_best_epoch(self,train_data_name=''):
+        fn = train_data_name+"validation_summary.csv"
         fn = 'reconstruction_'+fn if self.experiment_type=='seq2seq' else fn
         val_summary = pd.read_csv(self.experiment_logs+'/'+fn)
         best_mean_epoch = val_summary.iloc[0]['mean_epoch']

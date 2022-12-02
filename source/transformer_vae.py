@@ -23,14 +23,21 @@ class TSVAE(nn.Module):
 
 
     def forward(self, z):
-
         mu_z = self.layer_dict['mu_z'](z)
         logvar_z = self.layer_dict['logvar_z'](z)
 
-        s = torch.rand_like(mu_z)
-        new_z = mu_z + s * torch.exp(logvar_z)
+        # s = torch.rand_like(mu_z)
+        s = torch.randn_like(mu_z)
+        new_z = mu_z + s * torch.exp(0.5*logvar_z) #:/
 
         return new_z, mu_z, logvar_z
+
+    # def reconstruct(self,z):
+    #     mu_z= self.layer_dict['mu_z'](z)
+    #     logvar_z= self.layer_dict['logvar_z'](z)
+
+    #     z = mu_z#+logvar_z
+    #     return z, mu_z, logvar_z
 
 class VaeLoss(nn.Module):
     def __init__(self, 
@@ -41,7 +48,7 @@ class VaeLoss(nn.Module):
 
         super().__init__()
         self.device = torch.device('cuda')
-        self.reconstruction_loss = torch.nn.MSELoss().to(self.device)
+        self.reconstruction_loss = torch.nn.MSELoss(reduction='mean').to(self.device)
         self.classification_loss = torch.nn.CrossEntropyLoss().to(self.device)
         self.k0=k0
         self.k1=k1
@@ -55,8 +62,13 @@ class VaeLoss(nn.Module):
     def define_schedule(self):
         is_int = self.n_epochs%self.n_cycles
         steps_in_cycle = int(self.n_epochs/self.n_cycles) if is_int==0 else int(self.n_epochs/self.n_cycles+1)
+        # print(steps_in_cycle)
         r = torch.arange(-6,7,13/steps_in_cycle)
         self.beta = torch.sigmoid(r.repeat(self.n_cycles))
+        # r = torch.arange(1,10,10/steps_in_cycle)
+        # self.beta = r.repeat(self.n_cycles)
+        # print(self.beta)
+        
 
     def kl_loss(self, mu_z, logvar_z):
         #for standard normal
@@ -66,14 +78,23 @@ class VaeLoss(nn.Module):
 
     def forward(self, tgt, true_tgt,  mu_z, logvar_z, y_pred=None, true_y=None, i=1):
         kl_div = self.kl_loss(mu_z, logvar_z)
+        # print(kl_div)
         reconstruction_loss = self.reconstruction_loss(tgt, true_tgt)
+        # print(reconstruction_loss)
         if (y_pred is not None):
             classification_loss = self.classification_loss(y_pred, true_y)
-            total_loss = (self.k0*reconstruction_loss + self.k1*classification_loss) + self.beta[i]*kl_div
+            # total_loss = reconstruction_loss + 0.1*classification_loss + self.beta[i]*kl_div
+            total_loss = self.k0*reconstruction_loss + self.k1*classification_loss + self.beta[i]*kl_div
         else:
-            total_loss = self.k0*reconstruction_loss + kl_div
+            total_loss = reconstruction_loss+self.beta[i]*kl_div
         
         return total_loss
+
+    
+    # def forward(recon_x, x, mean, log_var):
+    #     RECON = F.mse_loss(recon_x, x.view(-1, 784), reduction='sum')
+    #     KLD = -0.5 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp())
+    #     return RECON + KLD, RECON, KLD
  
 
 class TSTransformerVAE(nn.Module):
@@ -152,6 +173,7 @@ class TSTransformerVAE(nn.Module):
         self.memory_mask = self.generate_square_subsequent_mask(self.max_len)
 
         self.criterion = VaeLoss(k0,k1,n_epochs,cycles)    
+        self.device = torch.device('cuda')
 
         self.init_weights()
 
@@ -164,7 +186,7 @@ class TSTransformerVAE(nn.Module):
                     if p.dim() > 1: 
                         nn.init.xavier_uniform_(p)
 
-    def reset_loss(self,n_epochs):
+    def reset_loss(self,n_epochs, k0=None, k1=None):
         k0 = self.criterion.k0
         k1 = self.criterion.k1
         n_cycles = self.criterion.n_cycles
@@ -180,6 +202,12 @@ class TSTransformerVAE(nn.Module):
                 for p in v.parameters():
                     p.requires_grad = False
 
+    def unfreeze_decoder(self) -> None:
+        for k,v in self.layer_dict.items():
+            if ('decoder' in k) or (k=='vae'):
+                print("unfreezing {}".format(k))
+                for p in v.parameters():
+                    p.requires_grad = True
 
     def freeze_autoencoder(self) -> None:
         for k,v in self.layer_dict.items():
@@ -187,6 +215,27 @@ class TSTransformerVAE(nn.Module):
                 print("freezing {}".format(k))
                 for p in v.parameters():
                     p.requires_grad = False
+
+    def unfreeze_autoencoder(self) -> None:
+        for k,v in self.layer_dict.items():
+            if k != 'classifier':
+                print("unfreezing {}".format(k))
+                for p in v.parameters():
+                    p.requires_grad = True
+    
+    def freeze_latent_space(self) -> None:
+        for k,v in self.layer_dict.items():
+            if k == 'vae':
+                print("freezing {}".format(k))
+                for p in v.parameters():
+                    p.requires_grad = False
+    
+    def unfreeze_latent_space(self) -> None:
+        for k,v in self.layer_dict.items():
+            if k == 'vae':
+                print("freezing {}".format(k))
+                for p in v.parameters():
+                    p.requires_grad = True
 
     def encode(self,src):
         src = src.permute(0,2,1)
@@ -213,6 +262,28 @@ class TSTransformerVAE(nn.Module):
         # print(out.shape)
         return out
 
+    def generate(self, src_shape, tgt=None, tgt_mask=None):
+        if tgt_mask is None:
+            tgt_mask = self.tgt_mask
+
+        mu = torch.randn(1).item()
+        # mu = tgt.mean()
+        mu_z = torch.full((src_shape[0],self.max_len,self.d_model),mu).cuda() #sampled from standard gaussian
+        # mu_z = torch.zeros(src_shape[0],self.max_len,self.d_model).cuda() #sampled from standard gaussian
+        # logvar_z = torch.full((src_shape[0],self.max_len,self.d_model),lvz).cuda() #sampled from standard gaussian
+        
+        logvar_z = torch.ones(src_shape[0],self.max_len,self.d_model).cuda() #sampled from standard gaussian
+        
+        s = torch.randn_like(mu_z)
+
+        new_z =  mu_z + s * torch.exp(0.5*logvar_z) #:/
+
+        out = self.decode(new_z,tgt,tgt_mask)
+
+        out_last = tgt[:,-1,:]
+        label = self.layer_dict['classifier'](out_last)
+
+        return self.local_decode(out), label, mu_z, logvar_z
 
     def forward(self, src,tgt=None,tgt_mask=None):
         if tgt_mask is None:

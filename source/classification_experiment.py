@@ -106,7 +106,10 @@ class ClassificationExperiment():
         self.save_results(results_cm, data_name+"_results.csv")
 
     def run_final_train_phase(self, data_loaders=None,n_epochs=None, 
-        model_name="final_model.pth.tar", data_name = 'final_training'):
+        model_save_name="final_model.pth.tar", data_name = 'final_training',
+        train_data_name=''):
+
+        data_name=train_data_name+'final_training'
 
         start_time = time.time()
         n_epochs = n_epochs if n_epochs else self.best_epoch
@@ -162,9 +165,15 @@ class ClassificationExperiment():
             'model': self.model.state_dict(),
             'optimizer':self.optimizer.state_dict()
                     }
-        self.save_model(model_name) 
+        self.save_model(model_save_name) 
         
-    def run_train_phase(self, model_name='best_validation_model.pth.tar', load_model=False):
+    def run_train_phase(self, model_load_name='best_validation_model.pth.tar',
+        model_save_name='best_validation_model.pth.tar', 
+        load_model=False,
+        train_data_name=''):
+
+        if load_model:
+            self.load_model(model_save_name=model_load_name)
 
         start_time = time.time()
         strike = 0
@@ -253,11 +262,11 @@ class ClassificationExperiment():
                     break
 
         #save statistics at the end only
-        self.save_model("best_validation_model.pth.tar")
-        self.save_statistics(train_stats, 'training_summary.csv')
-        self.save_results(last_train_cm, 'training_results.csv')
-        self.save_statistics(val_stats, 'validation_summary.csv')
-        self.save_results(best_val_cm, 'validation_results.csv')
+        self.save_model(model_save_name)
+        self.save_statistics(train_stats, train_data_name+'training_summary.csv')
+        self.save_results(last_train_cm, train_data_name+'training_results.csv')
+        self.save_statistics(val_stats, train_data_name+'validation_summary.csv')
+        self.save_results(best_val_cm, train_data_name+'validation_results.csv')
     
     
     def run_experiment(self):

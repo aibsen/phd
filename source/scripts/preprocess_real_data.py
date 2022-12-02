@@ -27,15 +27,71 @@ ztf_type_dict_4 = {
 
 ztf_names = [ztf_type_dict_4[k] for k in ztf_type_dict_4]
 
-url_template_mars = r"https://mars.lco.global/?sort_value=jd&sort_order=desc&objectId="
-url_template_lasair = r"https://lasair-ztf.lsst.ac.uk/object/"
-keys_mars = ["objectId","time","filter","magpsf"]
-keys_lasair = ["MJD",'Filter', 'magpsf','status']
-output_path = 'alerce_sn_low_prob_lcs_dirty.csv'
+def clean_csvs(fn_meta, fn_data):
+    meta = pd.read_csv(fn_meta)
+    data = pd.read_csv(fn_data)
 
+    #sanity check
+    #no repeated objs in metadata
+    assert(meta.shape[0]==len(meta.objectId.unique()))
+    #metadata has all objects in data and vv
+    assert(len(data.objectId.unique())==len(meta.objectId.unique()))
 
+    #add numeric id to both metadata and data
+    meta_ids = np.arange(meta.shape[0])
+    meta['object_id'] = meta_ids
+    m=meta[['objectId','object_id']]
+    d=data.merge(m, on='objectId', how='left')
+    #still same id lengths
+    assert(len(d.object_id.unique()) == len(meta.object_id.unique()))
+    assert(data.shape[0]==d.shape[0])
+    #all cols in data have numeric id
+    #drop cols that don't (they are left over headers)
+    d = d.dropna()
+    try:
+       assert(len(d.object_id.unique()) == len(meta.object_id.unique()))
+    except AssertionError as e:
+        #drop objects in metadata that were deleated in data
+        meta = meta[meta.objectId.isin(d.objectId.unique())]
+        #try again
+        assert(len(d.object_id.unique()) == len(meta.object_id.unique()))
 
-def at_leat_obs_days(lcs_fn, meta_fn, points_per_band=3, obs_days=30, n_channels = 2):
+    #all points in d have values
+    assert(pd.notnull(d.all()).all())
+    assert(pd.notna(d.all()).all())
+
+    #add numeric class tag to metadata
+    dict_inv = {v.translate({ord(i): None for i in '/-'}) : k for k,v in ztf_type_dict_4.items()}
+    meta['true_target'] = [int(dict_inv[k]) for k in meta.predicted_class]
+    #all columns in meta have valid numeric id
+    assert(pd.notna(meta.all()).all())
+
+    #convert bands in data to numbers (r==0, g==1)
+    #r==0 first (I didnt do else 1 in case there was some other filter value)
+    d['passband'] = [0 if f =='r' else f for f in d['filter']]
+    #g==1
+    d['passband'] = [1 if f =='g' else f for f in d['passband']]
+    #check that there are only 2 filters and that they correspond
+    assert(len(d.passband.unique())==len(d['filter'].unique())==2)
+    assert((d[d.passband==0]==d[d['filter']=='r']).all().all())
+    assert((d[d.passband==1]==d[d['filter']=='g']).all().all())
+    assert(pd.notnull(d.all().all()))
+    assert(pd.notna(d.all().all()))
+    
+    meta = meta.sort_values(by='objectId')
+    d = d.rename(columns={'time':'mjd'})
+    d = d.sort_values(by=['objectId','mjd'])
+    assert((meta.objectId.unique()==d.objectId.unique()).all())
+    assert((meta.object_id.unique()==d.object_id.unique()).all())
+
+    output_m_fn = fn_meta.split('.csv')[0]+'_clean.csv'
+    output_d_fn = (fn_data.split('.csv')[0]+'_clean.csv').replace('_dirty','')
+    print(output_m_fn) 
+    print(output_d_fn) 
+    d.to_csv(output_d_fn,index=False)
+    meta.to_csv(output_m_fn,index=False)
+
+def at_leat_obs_days(lcs_fn, meta_fn, points_per_band=3, obs_days=30, n_channels = 2, time_frame=100):
     
     #search for max brightness
     group_by_id_bright = lcs_fn.groupby(['object_id'])['magpsf'].agg(['min']).rename(columns = lambda x : 'max_magpsf').reset_index()
@@ -46,7 +102,7 @@ def at_leat_obs_days(lcs_fn, meta_fn, points_per_band=3, obs_days=30, n_channels
     merged = pd.merge(merged,time_max_mag,how='left', on='object_id',suffixes=('','_max'))
     
     #only keep points within 100 days of max brightness
-    merged = merged[np.abs(merged.mjd_max-merged.mjd)<100]
+    merged = merged[np.abs(merged.mjd_max-merged.mjd)<time_frame]
     group_by_id = merged.groupby(['object_id'])['mjd'].agg(['min', 'max']).rename(columns = lambda x : 'mjd_' + x).reset_index()
     group_by_id["mjd_diff"]=group_by_id.mjd_max-group_by_id.mjd_min
     
@@ -72,12 +128,12 @@ def at_leat_obs_days(lcs_fn, meta_fn, points_per_band=3, obs_days=30, n_channels
     return sn_enough, meta_enough, group_by_id
 
 def create_linearly_interpolated_vectors_careful(data_fn, meta_fn, output_fn, 
-    obs_days=30, points_per_band=3,n_channels=2, lc_max_length=128):
+    obs_days=30, points_per_band=3,n_channels=2, lc_max_length=128, time_frame=100):
 
     lcs = pd.read_csv(data_fn)
     meta = pd.read_csv(meta_fn)
 
-    sn_enough, tags_enough, group_by_id = at_leat_obs_days(lcs, meta, points_per_band, obs_days, n_channels)
+    sn_enough, tags_enough, group_by_id = at_leat_obs_days(lcs, meta, points_per_band, obs_days, n_channels,time_frame=time_frame)
     
     X=np.zeros((tags_enough.shape[0],n_channels,lc_max_length))
     X_void=np.zeros((tags_enough.shape[0],n_channels,lc_max_length))
@@ -108,7 +164,6 @@ def create_linearly_interpolated_vectors_careful(data_fn, meta_fn, output_fn,
         X_void[i,1,-lc_length:] = [np.abs(lc_g.scaled_mjd - t_i).min() for t_i in t]
         lens[i] = lc_length
     
-
     vectors = np.concatenate((X, X_void), axis=1)
     print(vectors.shape)
     Y = tags_enough.true_target.values
@@ -160,8 +215,6 @@ def create_linearly_interpolated_vectors(lcs_fn,meta_fn,output,
         'ids':ids
     }
 
-    # preprocess_data_utils.save_vectors(dataset,output)
-
 def create_gp_interpolated_vectors(lcs_fn, meta_fn, output_fn,
     points_per_band=3, obs_days=30, n_channels = 2, lc_max_length = 128):
     
@@ -194,7 +247,6 @@ def create_gp_interpolated_vectors(lcs_fn, meta_fn, output_fn,
 
     preprocess_data_utils.save_vectors(dataset,output_fn)
 
-
 def create_uneven_vectors(lcs_fn, meta_fn, output_fn,
     points_per_band=3, obs_days=30, n_channels=2, lc_max_length=128):
 
@@ -215,8 +267,14 @@ def create_uneven_vectors(lcs_fn, meta_fn, output_fn,
 
     preprocess_data_utils.save_vectors(dataset,output_fn)
 
+fn_meta = data_dir+'alerce_sn_meta_low_prob_clean.csv'
+fn_data = data_dir+'alerce_sn_lcs_low_prob_clean.csv'
 
-
+create_linearly_interpolated_vectors_careful(fn_data,fn_meta,
+    'real_test_linear_careful_3pb_20obsd_tf200_low_prob.h5',
+    obs_days=20,
+    time_frame=200    
+    )
 # create_linearly_interpolated_vectors(data_dir+'mars_sn_lcs_4.csv', data_dir+'mars_sn_meta_4.csv', data_dir+'real_test_linear_3pb_30obsd.h5')
 # create_linearly_interpolated_vectors_careful(data_dir+'mars_sn_lcs_4.csv', data_dir+'mars_sn_meta_4.csv', data_dir+'real_test_linear_3pb_30obsd_careful.h5')
 # create_gp_interpolated_vectors(data_dir+'mars_sn_lcs_4.csv', data_dir+'mars_sn_meta_4.csv', data_dir+'real_test_gp_careful_3pb_30obsd.h5')
@@ -296,32 +354,11 @@ def create_uneven_vectors(lcs_fn, meta_fn, output_fn,
 
 
 
-def scrap_sns_mars(metadata_fn, url_template=url_template_mars, keys=keys_mars, output_path=output_path):
-    print(metadata_fn)
-    metadata = pd.read_csv(data_dir+metadata_fn+'.csv')
-    ids = list(metadata.objectId.values)
-    n_ids = len(ids)
-    for i, id in enumerate(ids[4244:]):
-        print('Object {}/{}: {}'.format(i+4244,n_ids,id))
-        try:
-            url = url_template+id
-            tables = pd.read_html(url) # Returns list of all tables on page
-            print(tables)
-            df = tables[0][keys]
-            print(df)
-            times = list(df.time.astype('str').values)
-            times = Time(times, format="iso")
-            mjds = times.mjd
-            df.loc[:,'time']=mjds
-            df.to_csv(data_dir+output_path, mode='a', header=not os.path.exists(output_path),index=False)
-        except Exception as e:
-            print('Object id {} not found in url'.format(id))
-            print(e)
 
 
-# fn1 = 'alerce_sn_meta_low_prob'
-# scrap_sns_mars(fn1)
-fn_meta = data_dir+'alerce_sn_meta_low_prob.csv'
 
-def clean_csvs(fn_meta, fn_data):
+
+
+
+
 

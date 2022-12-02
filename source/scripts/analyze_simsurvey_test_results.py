@@ -17,14 +17,14 @@ type_dict = {
 types = [0,1,2,3]
 names = [type_dict[k] for k in type_dict]
 
-def plot_best_val_cm_cv(exp_name, folds=5):
+def plot_best_val_cm_cv(exp_name, folds=5,val_name=''):
     
     best_f1 = 0
     where = None
 
     for fold in range(folds):
         where_in_fold = exp_name+'/folds/fold_k{}/result_outputs/'.format(fold+1)
-        out = where_in_fold+'validation_summary.csv'
+        out = where_in_fold+'{}_validation_summary.csv'.format(val_name)
         info = pd.read_csv(out)
         max_f1 = info.f1.max()
         if max_f1 > best_f1:
@@ -33,7 +33,7 @@ def plot_best_val_cm_cv(exp_name, folds=5):
 
     print("plotting best fold val cm...")
 
-    plot_cm(where, csv_results="validation_results.csv", output_fname=exp_name+"/result_outputs/best_validation_cm.png")
+    plot_cm(where, csv_results="{}_validation_results.csv".format(val_name), output_fname=exp_name+"/result_outputs/{}_best_validation_cm.png".format(val_name))
 
 
 def plot_all_cm_cv(folds=5, results_dir=results_dir):

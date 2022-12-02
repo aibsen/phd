@@ -57,7 +57,7 @@ class SeededExperiment(nn.Module):
 
     def save_seed_statistics(self,summary_file):
         metrics = None
-        validation = summary_file in 'validation_summary.csv'
+        validation = 'validation_summary.csv' in summary_file
 
         if self.experiment_type == 'classification':
             stats = {'epoch':[],'accuracy':[],'loss':[],'f1':[],'precision':[],'recall':[]}
@@ -94,7 +94,14 @@ class SeededExperiment(nn.Module):
         
         stats_df.to_csv(self.experiment_logs+"/"+summary_file, index=False)
 
-    def run_experiment(self, final_only=False, test_data_name='test'):
+    def run_experiment(self, final_only=False, 
+        test_data_name='test', 
+        train_data_name='',
+        model_load_name_train='best_validation_model.pth.tar',
+        model_save_name_train='best_validation_model.pth.tar',
+        model_load_name_final_train='final_model.pth.tar',
+        model_save_name_final_train='final_model.pth.tar'):
+
         start_time = time.time()
         n_experiments = len(self.experiments)
         
@@ -102,7 +109,11 @@ class SeededExperiment(nn.Module):
             for i in range(n_experiments):
                 self.experiments[i].reset_experiment_params(self.exp_params)
                 self.experiments[i].reset_experiment_datasets(self.train_data,self.test_data)
-                self.experiments[i].run_experiment(final_only,test_data_name)
+                self.experiments[i].run_experiment(final_only,test_data_name,train_data_name,
+                model_load_name_train=model_load_name_train,
+                model_save_name_train=model_save_name_train,
+                model_load_name_final_train=model_load_name_final_train,
+                model_save_name_final_train=model_save_name_final_train)
 
         else:
             for i,seed in enumerate(self.seeds):
@@ -118,30 +129,35 @@ class SeededExperiment(nn.Module):
                     # ,
                     # seed=seed)
                 self.experiments.append(experiment)
-                self.experiments[i].run_experiment(final_only, test_data_name)
+                self.experiments[i].run_experiment(final_only, test_data_name,train_data_name,
+                    model_load_name_train=model_load_name_train,
+                    model_save_name_train=model_save_name_train,
+                    model_load_name_final_train=model_load_name_final_train,
+                    model_save_name_final_train=model_save_name_final_train)
                 # experiment.run_experiment(final_only, test_data_name)
 
         if self.train_data and not final_only and self.test_data:
-            self.save_seed_statistics("validation_summary.csv")
-            self.save_seed_statistics("final_training_summary.csv")
+            self.save_seed_statistics(train_data_name+"validation_summary.csv")
+            self.save_seed_statistics(train_data_name+"final_training_summary.csv")
 
         
         elif self.train_data and final_only:
-            self.save_seed_statistics("final_training_summary.csv")
+            self.save_seed_statistics(train_data_name+"final_training_summary.csv")
 
         if self.test_data:
             self.save_seed_statistics(test_data_name+"_summary.csv")
 
         print("--- %s seconds ---" % (time.time() - start_time))
 
-    def run_test_phase(self, test_data_name='test'):
+    def run_test_phase(self, test_data_name='test',
+        model_name='final_model.pth.tar'):
         n_experiments = len(self.experiments)
 
         if n_experiments>0:
             for i in range(n_experiments):
                 self.experiments[i].reset_experiment_params(self.exp_params)
                 self.experiments[i].reset_experiment_datasets(test_data=self.test_data)
-                self.experiments[i].run_test_phase(test_data_name)
+                self.experiments[i].run_test_phase(test_data_name,model_name)
 
         else: 
             for i,seed in enumerate(self.seeds):
@@ -152,9 +168,26 @@ class SeededExperiment(nn.Module):
                     test_data=self.test_data,
                     k=self.k)
                 self.experiments.append(experiment)
-                self.experiments[i].run_test_phase(test_data_name)
+                self.experiments[i].run_test_phase(test_data_name,model_name)
 
         self.save_seed_statistics(test_data_name+"_summary.csv")
+
+
+    def run_prediction(self,model_name="final_model.pth.tar",
+        data_name="predicted",load_model=True):
+            for i,seed in enumerate(self.seeds):
+                torch.cuda.manual_seed(seed=seed)
+                print("Starting experiment, seed: "+str(seed))
+                exp_name = self.experiment_folder+"/seed_"+str(seed)
+                print(exp_name)
+                experiment = CVExperiment(exp_name, 
+                    self.exp_params, 
+                    test_data=self.test_data,
+                    k=self.k)
+                self.experiments.append(experiment)
+                self.experiments[i].run_prediction(data_name,model_name)
+
+
 
     # def run_test_phase(self):
         

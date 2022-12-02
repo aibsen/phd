@@ -13,6 +13,7 @@ data_dir = "/home/ai/phd/data/ztf/training/"
 exp_name = results_dir+"vae_cyc3" #e100, p5, dm 128,k1 0.5
 #cyc2 means that I made a mistake by not adding 0.5 to 
 # resampling and this is the version where that  is fixed
+#cyc 3 means I reduced dhid from 150 to 64, which in retorspective was the obvious thing to do.
 
 #0, num_epochs = 50
 #1, num_epochs = 40
@@ -82,12 +83,9 @@ d_models = [128]
 lrs = [1e-3]
 for heads in [4]:
     for d_model in d_models:
-        for f in freeze:
-            for k1 in k1s:
-                for lr in lrs:
-                    enc_pos = None
-                    dec_pos = None
-
+        for k1 in k1s:
+            for lr in lrs:
+                for f in freeze:
 
                     enc_pos = TimeFiLMEncoding(d_model, max_len=lc_length)
                     dec_pos = TimeFiLMEncoding(d_model, max_len=lc_length)
@@ -103,13 +101,12 @@ for heads in [4]:
                         k1 = k1,
                         n_epochs=exp_params_reconstruction['num_epochs'],
                         cycles=4,
-                        d_hid=64)
+                        d_hid=32)
 
                     exp_params_reconstruction['network_model']=nn
                     exp_params_reconstruction['learning_rate']=lr
 
-                    name = exp_name+"_{}_k1{}_dm{}_lr{}_h{}".format(f, k1, d_model,lr,heads)
-
+                    name = exp_name+"_k1{}_dm{}_lr{}_h{}_32dh".format(k1, d_model,lr,heads)
 
                     experiment = SeededExperiment(
                         exp_name=name,
@@ -119,52 +116,89 @@ for heads in [4]:
                         test_data=test_dataset
                     )
 
-                    experiment.run_experiment()
+                    if not os.path.isfile(results_dir+name+'/seed_1772670/saved_models/final_model.pth.tar'):
+                        experiment.run_experiment()
 
-                    experiment.reset_experiment_datasets(test_data=real_test_dataset)
-                    experiment.run_test_phase("test_real")
+                        experiment.reset_experiment_datasets(test_data=real_test_dataset)
+                        experiment.run_test_phase("test_real")
 
                     # now for classification tunning
-                    nn.classify=True
                     
                     if f == 'freeze_vae':
                         nn.freeze_autoencoder()
-                    elif f == 'freeze_dec':
-                        nn.freeze_decoder()
+                        model_load_name_train='best_validation_model.pth.tar'
+                        model_save_name_train='best_validation_model_freeze_vae.pth.tar'
+                        model_load_name_final_train='final_model.pth.tar'
+                        model_save_name_final_train='final_model_freeze_vae.pth.tar'
+                        train_data_name='freeze_vae_'
+                        test_data_name='freeze_vae_test'
 
+
+                    elif f == 'freeze_dec':
+                        nn.unfreeze_autoencoder()
+                        nn.freeze_decoder()
+                        model_load_name_train='best_validation_model.pth.tar'
+                        model_save_name_train='best_validation_model_freeze_dec.pth.tar'
+                        model_load_name_final_train='final_model.pth.tar'
+                        model_save_name_final_train='final_model_freeze_dec.pth.tar'
+                        train_data_name='freeze_dec_'
+                        test_data_name='freeze_dec_test'
+
+
+                    elif f == 'no_freeze':
+                        nn.unfreeze_autoencoder()
+                        model_load_name_train='best_validation_model.pth.tar'
+                        model_save_name_train='best_validation_model_no_freeze.pth.tar'
+                        model_load_name_final_train='final_model.pth.tar'
+                        model_save_name_final_train='final_model_no_freeze.pth.tar'
+                        train_data_name='no_freeze_'
+                        test_data_name='no_freeze_test'
+
+                    nn.classify=True
                     exp_params_classification['network_model']=nn
                     exp_params_classification['learning_rate']=lr
 
                     experiment.reset_experiment_params(exp_params_classification)
                     experiment.reset_experiment_datasets(train_dataset,test_dataset)
 
-                    experiment.run_experiment()
+                    experiment.run_experiment(
+                        test_data_name=test_data_name,
+                        train_data_name=train_data_name,
+                        model_load_name_train=model_load_name_train,
+                        model_save_name_train=model_save_name_train,
+                        model_load_name_final_train=model_load_name_final_train,
+                        model_save_name_final_train=model_save_name_final_train
+                    )
 
                     where = name+'/seed_1772670'
-                    plot_best_val_cm_cv(where)
+                    plot_best_val_cm_cv(where,val_name=f)
                     plot_cm(where+'/result_outputs/',
-                        'test_results.csv',
-                        where+'/result_outputs/test_cm.png')
+                        '{}_test_results.csv'.format(f),
+                        where+'/result_outputs/test_{}_cm.png'.format(f))
 
                     experiment.reset_experiment_datasets(test_data=real_test_dataset)
-                    experiment.run_test_phase("test_real")
+
+                    experiment.run_test_phase(
+                        "{}_test_real".format(f),
+                        model_name=model_save_name_final_train)
+
                     plot_cm(where+'/result_outputs/',
-                        'test_real_results.csv',
-                        where+'/result_outputs/test_real_cm.png')
+                        '{}_test_real_results.csv'.format(f),
+                        where+'/result_outputs/test_{}_real_cm.png'.format(f))
 
 
-                    # and now.. did that ruin reconstruction?
-                    nn.classify = False
-                    exp_params_reconstruction['network_model']=nn
-                    exp_params_reconstruction['pick_up'] = True
+                    # # and now.. did that ruin reconstruction?
+                    # nn.classify = False
+                    # exp_params_reconstruction['network_model']=nn
+                    # exp_params_reconstruction['pick_up'] = True
 
-                    experiment.reset_experiment_params(exp_params_reconstruction)
-                    experiment.run_test_phase("test_after")
+                    # experiment.reset_experiment_params(exp_params_reconstruction)
+                    # experiment.run_test_phase("test_after")
 
-                    experiment.reset_experiment_datasets(test_data=real_test_dataset)
-                    experiment.run_test_phase("test_real_after")
+                    # experiment.reset_experiment_datasets(test_data=real_test_dataset)
+                    # experiment.run_test_phase("test_real_after")
                     
-                    exp_params_reconstruction['pick_up'] = False
+                    # exp_params_reconstruction['pick_up'] = False
 
 
 
