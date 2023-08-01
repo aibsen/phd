@@ -11,16 +11,17 @@ from convolutional_models import FCNN1D, ResNet1D
 from seeded_experiment import SeededExperiment
 from plot_utils import *
 from transforms import MultiCropPadTensor, CropPadTensor
+import analyze_simsurvey_results
 
 results_dir = "../../results/"
-training_data_dir = "../../data/ztf/training/linearly_interpolated/"
-test_data_dir = "../../data/ztf/testing/"
-training_fn = training_data_dir+"simsurvey_data_balanced_1.h5"
-test_fn = test_data_dir+"real_data_careful.h5"
+training_data_dir = "../../data/ztf/training/"
+test_data_dir = "../../data/ztf/training/"
+training_fn = training_data_dir+"simsurvey_data_balanced_6_mag_linear_careful.h5"
+test_fn = test_data_dir+"real_test_linear_6.h5"
 
 lc_length = 128
 
-num_epochs = 100
+num_epochs = 30
 seeds = [1772670]
 seed=torch.cuda.manual_seed(seed=1772670)
 n_seeds = 1
@@ -30,9 +31,9 @@ lr = 1e-03
 wdc = 1e-03
 batch_size = 64
 
-exp_name_template = "simsurvey_cropped_fix"
-############ PART 1 ############### 100% LCs
-# # training/testing with complete light curves for all 4 models.
+exp_name_template = "simsurvey_cropped_fix_00"
+# ############ PART 1 ############### 100% LCs
+# # # training/testing with complete light curves for all 4 models.
 transform = MultiCropPadTensor(lc_length,fractions=[0.25,0.25],croppings=[0.5,0.25])
 train_dataset = LCs(lc_length,training_fn, n_classes=num_classes,transforms=[transform])
 train_dataset.load_data_into_memory()
@@ -57,11 +58,11 @@ exp_params={
     "use_gpu" : use_gpu,
     "batch_size" : batch_size,
     "num_output_classes": num_classes,
-    "patience":5,
+    "patience":3,
     "validation_step":3
 }
 
-for arch in range(2,3):
+for arch in range(0,2):
 
     nn_params = {
         "input_shape" : input_shape,
@@ -78,6 +79,8 @@ for arch in range(2,3):
         if arch == 3:
             exp_name = exp_name+"sa"
             nn_params["attention"] = True
+            nn_params['da']=20
+            nn_params['r']=1
         
         network = GRU1D(nn_params)
 
@@ -94,10 +97,11 @@ for arch in range(2,3):
         exp_name,
         exp_params = exp_params,
         seeds = seeds,
-        # train_data = train_dataset
+        train_data = train_dataset,
         test_data = test_dataset
     )
 
-    # experiment.run_experiment()
-    experiment.run_test_phase(save_name='_{}'.format('old'))
+    experiment.run_experiment()
+    experiment.run_test_phase()
 
+    analyze_simsurvey_results.overall_cm_cv(where_in_fold=exp_name)

@@ -136,7 +136,14 @@ class Experiment(nn.Module):
     def load_model(self, model_save_dir, model_save_name):
         save_path = os.path.join(model_save_dir, model_save_name)
         self.state = torch.load(f=save_path)
+        # for p in self.model.parameters():
+            # print(p)
+            # break
+        # print(model.model.parameters())
         self.model.load_state_dict(state_dict=self.state['model'])
+        # for p in self.model.parameters():
+            # print(p)
+            # break
         self.optimizer.load_state_dict(state_dict=self.state['optimizer'])
         self.best_epoch = self.state['epoch']
         self.best_f1 = self.state['f1']
@@ -171,6 +178,7 @@ class Experiment(nn.Module):
         #     break
         if load_model:
             try:
+                print('loading')
                 self.load_model(model_save_dir=self.experiment_saved_models, model_save_name=model_name)
 
             except Exception as e:

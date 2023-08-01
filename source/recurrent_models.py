@@ -84,7 +84,7 @@ class GRU1D(nn.Module):
 
         # print(out.shape)
         out = self.layer_dict['linear'](out)
-        # print(out.shape)
+        # print(out)
         return out
 
     def reset_gru_layer(self):

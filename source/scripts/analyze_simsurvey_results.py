@@ -22,7 +22,7 @@ simsurvey_ztf_type_dict = {
 ztf_names = [simsurvey_ztf_type_dict[k] for k in simsurvey_ztf_type_dict]
 # print(ztf_names)
 
-def overall_cm(where,csv_results="test_0.25_results.csv",output_name="test_0.25_cm.png"):
+def overall_cm(where,csv_results="test_results.csv",output_name="test_cm.png"):
     out = where+output_name
     results = pd.read_csv(where+csv_results)
     predictions = results.prediction

@@ -122,6 +122,31 @@ class CropPadTensor(object):
         print("done!")
         return X, Y, obid, lens
 
+# class MultiCropPadTensor(object):
+#     def __init__(self, lc_length, fractions, croppings):
+#         assert(sum(fractions)<=1)
+#         assert(len(croppings)==len(fractions))
+#         self.lc_length = lc_length
+#         self.fractions = fractions
+#         self.croppings = croppings
+
+#     def __call__(self,sample):
+#         print("applying multiple croppings/paddings")
+#         X,Y,obid=sample
+#         length = len(Y)
+#         random_idxs = np.random.choice(range(length), size=int(length*sum(self.fractions)), replace=False)
+#         i=0
+#         lens = torch.full((length,),self.lc_length)
+#         for j,f in enumerate(self.fractions):
+#             i_new = int(i+len(random_idxs)*f)
+#             to_crop = random_idxs[i:i_new]
+#             cut_length = int(self.lc_length*self.croppings[j])
+#             padding = torch.nn.ConstantPad1d((0,self.lc_length-cut_length),0)
+#             X[to_crop] = padding(X[to_crop,:,0:cut_length])
+#             lens[to_crop]=cut_length
+#             i+=i_new
+#         print("done!")
+#         return X, Y,obid,lens
 class MultiCropPadTensor(object):
     def __init__(self, lc_length, fractions, croppings):
         assert(sum(fractions)<=1)
